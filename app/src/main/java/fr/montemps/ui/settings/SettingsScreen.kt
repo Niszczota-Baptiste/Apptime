@@ -1,12 +1,10 @@
 package fr.montemps.ui.settings
 
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,13 +17,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -38,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -46,8 +46,9 @@ import fr.montemps.BuildConfig
 import fr.montemps.data.prefs.AppPreferences
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.ui.ScreenScaffold
-import fr.montemps.ui.components.ActivityBadge
-import fr.montemps.ui.components.SectionTitle
+import fr.montemps.ui.components.ActivityMarker
+import fr.montemps.ui.components.PageHeader
+import fr.montemps.ui.components.SectionHeader
 import fr.montemps.ui.label
 import java.time.LocalDate
 
@@ -74,53 +75,41 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
         uri?.let { vm.prepareRestore(resolver, it) }
     }
 
-    ScreenScaffold(title = "Réglages", snackbar = snackbar) { padding ->
+    ScreenScaffold(snackbar = snackbar) { padding ->
         val s = state ?: return@ScreenScaffold
         val byId = s.activities.associateBy { it.id }
+        val showIcons = s.prefs.showIcons
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState()),
+                .padding(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding())
+                .verticalScroll(rememberScrollState())
+                .padding(top = 8.dp, bottom = 32.dp),
         ) {
-            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            SectionTitle("Notification", Modifier.padding(horizontal = 16.dp))
-            SwitchRow(
-                "Afficher la notification de suivi",
-                "Activité en cours avec chronomètre et actions rapides.",
-                s.prefs.notificationEnabled,
-                vm::setNotificationEnabled,
-            )
+            PageHeader("Réglages", Modifier.padding(horizontal = 20.dp))
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
+
+            Group("Notification")
+            SwitchRow("Notification de suivi", "Activité en cours, chronomètre et actions rapides.", s.prefs.notificationEnabled, vm::setNotificationEnabled)
             repeat(AppPreferences.MAX_FAVORITES) { slot ->
                 val id = s.prefs.favoriteIds.getOrNull(slot)
-                ListItem(
-                    headlineContent = { Text("Action rapide ${slot + 1}") },
-                    supportingContent = { Text(id?.let { byId[it]?.label() } ?: "Aucune") },
-                    modifier = Modifier.clickable { favoriteSlot = slot }.heightIn(min = 64.dp),
+                SettingsRow(
+                    title = "Action rapide ${slot + 1}",
+                    value = id?.let { byId[it]?.label(showIcons) } ?: "Aucune",
+                    onClick = { favoriteSlot = slot },
                 )
             }
-            Text(
-                "Si une activité favorite est déjà en cours, son action est masquée (elle ne ferait rien). " +
-                    "Android et HyperOS peuvent n'afficher qu'une partie des actions selon l'espace disponible.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
             SwitchRow(
                 "Masquer le nom sur l'écran verrouillé",
-                "Affiche seulement « Suivi en cours » et la durée lorsque le téléphone est verrouillé.",
+                "N'affiche que « Suivi en cours » et la durée.",
                 s.prefs.hideNameOnLockScreen,
                 vm::setHideName,
             )
-            ListItem(
-                headlineContent = { Text("Réafficher la notification") },
-                supportingContent = { Text("Si vous l'avez balayée pour la session en cours.") },
-                modifier = Modifier.clickable { vm.reshowNotification() },
-            )
-            ListItem(
-                headlineContent = { Text("Réglages de notification d'Android") },
-                supportingContent = { Text("Autorisation, écran verrouillé, style d'affichage.") },
-                modifier = Modifier.clickable {
+            SettingsRow("Réafficher la notification", "Si vous l'avez balayée.", onClick = vm::reshowNotification)
+            SettingsRow(
+                "Notifications Android",
+                "Autorisation, écran verrouillé, contenu sensible.",
+                onClick = {
                     context.startActivity(
                         Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                             .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
@@ -128,56 +117,40 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
                     )
                 },
             )
-            Text(
-                "Écran verrouillé : la notification n'y apparaît que si Android l'autorise. Vérifiez dans les réglages du " +
-                    "téléphone (rubrique Notifications / Écran de verrouillage — l'intitulé varie selon HyperOS) que " +
-                    "« Mon Temps » peut afficher ses notifications sur l'écran verrouillé, et si le contenu " +
-                    "sensible doit être masqué. Le rendu exact dépend de l'appareil.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            Help(
+                "Une favorite déjà en cours n'est pas proposée. L'affichage sur l'écran verrouillé dépend des réglages " +
+                    "d'Android et d'HyperOS ; le rendu exact varie selon l'appareil.",
             )
-            HorizontalDivider()
 
-            SectionTitle("Suivi", Modifier.padding(horizontal = 16.dp))
-            ListItem(
-                headlineContent = { Text("Signaler une session peut-être oubliée") },
-                supportingContent = { Text("Après ${s.prefs.forgottenThresholdHours} h, ou après un redémarrage du téléphone.") },
-                modifier = Modifier.clickable { chooseThreshold = true },
-            )
-            ListItem(
-                headlineContent = { Text("Gérer les activités") },
-                supportingContent = { Text("Créer, renommer, réordonner, archiver.") },
-                modifier = Modifier.clickable(onClick = onManageActivities),
-            )
-            HorizontalDivider()
+            Group("Affichage")
+            SwitchRow("Icônes des activités", "Émojis à la place des pastilles de couleur.", s.prefs.showIcons, vm::setShowIcons)
 
-            SectionTitle("Données", Modifier.padding(horizontal = 16.dp))
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { csvLauncher.launch("mon-temps-sessions-$today.csv") }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                    Text("Exporter les sessions (CSV)")
-                }
-                OutlinedButton(onClick = { jsonLauncher.launch("mon-temps-sauvegarde-$today.json") }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                    Text("Créer une sauvegarde (JSON)")
-                }
-                OutlinedButton(
-                    onClick = { restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                ) { Text("Restaurer une sauvegarde…") }
-                Text(
-                    "Les fichiers sont enregistrés à l'endroit choisi (téléphone, carte, cloud…). L'application ne demande aucun " +
-                        "accès général au stockage et fonctionne entièrement hors connexion.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            HorizontalDivider(Modifier.padding(top = 16.dp))
+            Group("Suivi")
+            SettingsRow(
+                "Session peut-être oubliée",
+                "Signalée à la réouverture, ou après un redémarrage.",
+                value = "${s.prefs.forgottenThresholdHours} h",
+                onClick = { chooseThreshold = true },
+            )
+            SettingsRow("Gérer les activités", "Créer, renommer, réordonner, archiver.", onClick = onManageActivities)
+
+            Group("Données")
+            SettingsRow("Exporter les sessions", "Fichier CSV pour tableur.", enabled = !busy, onClick = {
+                csvLauncher.launch("mon-temps-sessions-$today.csv")
+            })
+            SettingsRow("Créer une sauvegarde", "Fichier JSON complet.", enabled = !busy, onClick = {
+                jsonLauncher.launch("mon-temps-sauvegarde-$today.json")
+            })
+            SettingsRow("Restaurer une sauvegarde", "Remplace toutes les données actuelles.", enabled = !busy, onClick = {
+                restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+            })
+            Help("Fichiers enregistrés où vous le choisissez. Aucun accès général au stockage, aucune connexion réseau.")
+
             Text(
-                "Mon Temps ${BuildConfig.VERSION_NAME} · Android ${Build.VERSION.RELEASE}",
-                style = MaterialTheme.typography.bodySmall,
+                "Mon Temps ${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
             )
         }
     }
@@ -187,15 +160,15 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
         PickDialog(
             title = "Action rapide ${slot + 1}",
             options = listOf<TrackedActivity?>(null) + activities,
-            label = { it?.label() ?: "Aucune" },
-            leading = { it?.let { a -> ActivityBadge(a, size = 32.dp) } },
+            label = { it?.name ?: "Aucune" },
+            leading = { it?.let { a -> ActivityMarker(a) } },
             onPick = { vm.setFavorite(slot, it?.id); favoriteSlot = null },
             onDismiss = { favoriteSlot = null },
         )
     }
     if (chooseThreshold) {
         PickDialog(
-            title = "Session peut-être oubliée après…",
+            title = "Signaler une session après…",
             options = AppPreferences.thresholdChoices,
             label = { "$it heures" },
             leading = { },
@@ -211,7 +184,7 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
                 Text(
                     "Sauvegarde du ${p.exportedAt.take(10)} : ${p.snapshot.activities.size} activités et " +
                         "${p.snapshot.sessions.size} sessions.\n\nToutes les activités, sessions et préférences actuelles " +
-                        "seront remplacées. Pensez à créer d'abord une sauvegarde des données actuelles.",
+                        "seront remplacées. Pensez à sauvegarder d'abord les données actuelles.",
                 )
             },
             confirmButton = { TextButton(onClick = vm::confirmRestore) { Text("Remplacer") } },
@@ -221,13 +194,64 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
 }
 
 @Composable
-private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
-        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
-        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+private fun Group(title: String) = SectionHeader(title, Modifier.padding(horizontal = 20.dp))
+
+@Composable
+private fun Help(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
     )
+}
+
+@Composable
+private fun SettingsRow(
+    title: String,
+    subtitle: String? = null,
+    value: String? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = muted) }
+        }
+        value?.let {
+            Spacer(Modifier.width(12.dp))
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = muted)
+        }
+        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = muted.copy(alpha = 0.6f))
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(16.dp))
+        Switch(checked = checked, onCheckedChange = null)
+    }
 }
 
 @Composable
@@ -249,14 +273,15 @@ private fun <T> PickDialog(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 56.dp)
+                            .heightIn(min = 52.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable { onPick(o) }
-                            .padding(vertical = 8.dp),
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         leading(o)
-                        Spacer(Modifier.width(12.dp))
-                        Text(label(o), style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.width(14.dp))
+                        Text(label(o), style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }

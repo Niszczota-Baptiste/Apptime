@@ -15,6 +15,8 @@ object Fmt {
     private val dayLong: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", locale)
     private val dayMedium: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", locale)
     private val dayShort: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM", locale)
+    private val dayTitle: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", locale)
+    private val weekdayShort: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d", locale)
 
     /** « 01:23:45 » (les heures peuvent dépasser 24). */
     fun hms(d: Duration): String {
@@ -52,6 +54,12 @@ object Fmt {
     fun dayLong(date: LocalDate): String = dayLong.format(date).replaceFirstChar { it.titlecase(locale) }
     fun dayMedium(date: LocalDate): String = dayMedium.format(date).replaceFirstChar { it.titlecase(locale) }
     fun dayShort(date: LocalDate): String = dayShort.format(date)
+
+    /** « Mercredi 4 novembre » (titre de l'écran Aujourd'hui). */
+    fun dayTitle(date: LocalDate): String = dayTitle.format(date).replaceFirstChar { it.titlecase(locale) }
+
+    /** « Lun. 2 » (lignes du bilan hebdomadaire). */
+    fun weekdayShort(date: LocalDate): String = weekdayShort.format(date).replaceFirstChar { it.titlecase(locale) }
 
     /**
      * Heure de début relative au jour de référence : « 09:15 », « hier 23:10 »,

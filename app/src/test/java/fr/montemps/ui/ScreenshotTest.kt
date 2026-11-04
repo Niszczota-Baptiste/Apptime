@@ -168,7 +168,7 @@ class ScreenshotTest {
         seed()
         launch()
         tap("Historique")
-        tap("Ajouter une session") // par défaut : 14:40 → 15:40, chevauche des sessions existantes
+        tap("Ajouter") // par défaut : 14:40 → 15:40, chevauche des sessions existantes
         tap("Choisir une activité")
         tap("Sport")
         tap("Enregistrer")
@@ -178,10 +178,34 @@ class ScreenshotTest {
 
     @Test
     @Config(qualifiers = "w412dp-h892dp-night-xhdpi")
-    fun todayDark() {
+    fun darkTheme() {
         seed()
         launch()
         shot("02-aujourdhui-sombre")
+        tap("Historique")
+        shot("16-historique-sombre")
+        tap("Bilans")
+        tap("Semaine")
+        shot("17-bilan-semaine-sombre")
+    }
+
+    /** Page « Semaine » entière (gabarit allongé) pour voir aussi la vue par jour. */
+    @Test
+    @Config(qualifiers = "w412dp-h1460dp-xhdpi")
+    fun weeklyReportFullPage() {
+        seed()
+        launch()
+        tap("Bilans")
+        tap("Semaine")
+        shot("06b-bilan-semaine-page-entiere")
+    }
+
+    @Test
+    fun withActivityIcons() {
+        runBlocking { c.preferences.setShowIcons(true) }
+        seed()
+        launch()
+        shot("18-aujourdhui-icones")
     }
 
     @Test
@@ -220,9 +244,9 @@ class ScreenshotTest {
     fun notificationRendering() {
         val start = Instant.ofEpochMilli(System.currentTimeMillis()).minusSeconds(22 * 60 + 10)
         val content = fr.montemps.notification.TrackingNotificationContent(
-            sessionId = 1, activityName = "Travail", activityIcon = "💼", activityColor = 0xFF1E88E5.toInt(),
+            sessionId = 1, activityName = "Travail", activityIcon = null, activityColor = 0xFF4A78E0.toInt(),
             start = start, startLabel = "15:20",
-            favorites = listOf(fr.montemps.notification.FavoriteAction(DefaultActivities.BREAK, "☕ Pause")),
+            favorites = listOf(fr.montemps.notification.FavoriteAction(DefaultActivities.BREAK, "Pause")),
             hideNameOnLockScreen = false,
         )
         val n = c.notifier.build(content)

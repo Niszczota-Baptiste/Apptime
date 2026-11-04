@@ -4,6 +4,7 @@ import fr.montemps.data.prefs.PreferencesRepository
 import fr.montemps.domain.TrackingStore
 import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.time.TimeSource
+import fr.montemps.domain.model.TrackedActivity
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -43,12 +44,12 @@ class NotificationController(
             .filter { it != active.activityId }
             .mapNotNull { store.activity(it) }
             .filter { !it.archived }
-            .map { FavoriteAction(it.id, listOfNotNull(it.icon, it.name).joinToString(" ")) }
+            .map { FavoriteAction(it.id, it.label(p.showIcons)) }
         notifier.show(
             TrackingNotificationContent(
                 sessionId = active.id,
                 activityName = activity.name,
-                activityIcon = activity.icon,
+                activityIcon = activity.icon?.takeIf { p.showIcons && it.isNotBlank() },
                 activityColor = activity.color,
                 start = active.start,
                 startLabel = Fmt.startLabel(active.start, today, zone),
@@ -57,6 +58,9 @@ class NotificationController(
             ),
         )
     }
+
+    private fun TrackedActivity.label(showIcons: Boolean): String =
+        if (showIcons) listOfNotNull(icon?.takeIf { it.isNotBlank() }, name).joinToString(" ") else name
 
     suspend fun onUserDismissed(sessionId: Long) {
         val active = store.activeSession()

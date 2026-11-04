@@ -46,7 +46,7 @@ class NotificationTest {
     fun startingShowsSilentChronometerNotificationWithFavorites() = runBlocking {
         val s = (c.tracker.switchTo(WORK) as TransitionResult.Started).session
         val n = current()!!
-        assertEquals("💼 Travail", n.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals("Travail", n.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
         assertEquals("En cours depuis 09:00", n.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
         assertTrue(n.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER))
         assertEquals(s.start.toEpochMilli(), n.`when`)
@@ -55,7 +55,7 @@ class NotificationTest {
         assertEquals(Notification.VISIBILITY_PUBLIC, n.visibility)
         assertEquals(Notification.CATEGORY_STOPWATCH, n.category)
         // Favorites par défaut : Pause et Travail ; Travail est actif donc seule Pause est proposée.
-        assertEquals(listOf("☕ Pause", "Arrêter"), n.actions.map { it.title.toString() })
+        assertEquals(listOf("Pause", "Arrêter"), n.actions.map { it.title.toString() })
         val channel = nm.getNotificationChannel(TrackingNotifier.CHANNEL_ID)
         assertNull(channel.sound)
         assertTrue(!channel.shouldVibrate())
@@ -69,13 +69,22 @@ class NotificationTest {
         repeat(3) { deliver(pause.actionIntent) } // appuis répétés
         assertEquals(BREAK, c.tracker.currentSession()?.activityId)
         assertEquals(2, c.store.allSessions().size)
-        assertEquals("☕ Pause", current()!!.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals("Pause", current()!!.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
 
         val stop = current()!!.actions.first { it.title == "Arrêter" }
         time.advance(Duration.ofMinutes(5))
         deliver(stop.actionIntent)
         assertNull(c.tracker.currentSession())
         assertNull(current())
+    }
+
+    @Test
+    fun iconsInNotificationFollowDisplayPreference() = runBlocking {
+        c.preferences.setShowIcons(true)
+        c.tracker.switchTo(WORK)
+        val n = current()!!
+        assertEquals("💼 Travail", n.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals(listOf("☕ Pause", "Arrêter"), n.actions.map { it.title.toString() })
     }
 
     @Test

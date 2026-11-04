@@ -117,6 +117,21 @@ et ne la republie pas pour cette session ; elle réapparaît au changement d'act
 - PendingIntent explicites, immuables, vers un récepteur **non exporté**.
 - Pas de notification plein écran, pas de faux appel, pas de « Live Update » dans cette version.
 
+## Interface
+
+- Thème `ui/theme/Theme.kt` : palettes claire et sombre neutres, définies à la main ; pas de
+  Material You (les couleurs du fond d'écran HyperOS ne modifient pas l'app) et pas de teinte
+  d'élévation. Typographie : titres resserrés, grands chiffres en graisse fine, chiffres à chasse
+  fixe (`tnum`) pour les durées.
+- Composants `ui/components` : pastille d'activité, tuile (négatif = active), bouton pilule, barre
+  de répartition (segments arrondis, gris = non suivi), sélecteur segmenté, en-têtes.
+- Le chronomètre de l'écran principal s'adapte à la largeur (`TextAutoSize`) : il reste sur une
+  ligne même avec une très grande taille de texte ; les raccourcis passent alors sur une colonne.
+- La zone « en cours » a la même hauteur avec ou sans activité : les raccourcis ne se déplacent
+  jamais sous le doigt.
+- « Icônes des activités » est une préférence d'affichage (DataStore) volontairement exclue de la
+  sauvegarde JSON (format inchangé) ; elle s'applique aussi au titre et aux actions de la notification.
+
 ## Sauvegarde
 
 - **CSV** : `;` + BOM UTF-8 (Excel/LibreOffice en français), heures locales et UTC, durée en

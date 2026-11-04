@@ -1,6 +1,5 @@
 package fr.montemps.ui.activities
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,19 +21,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -60,8 +59,9 @@ import fr.montemps.domain.CatalogResult
 import fr.montemps.domain.model.DefaultActivities
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.ui.ScreenScaffold
-import fr.montemps.ui.components.ActivityBadge
-import fr.montemps.ui.components.SectionTitle
+import fr.montemps.ui.components.ActivityMarker
+import fr.montemps.ui.components.FieldLabel
+import fr.montemps.ui.components.SectionHeader
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -97,51 +97,59 @@ fun ActivitiesScreen(vm: ActivitiesViewModel, onBack: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     var editing by remember { mutableStateOf<EditTarget?>(null) }
     LaunchedEffect(Unit) { vm.events.collect { snackbar.showSnackbar(it) } }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
 
     ScreenScaffold(
         title = "Activités",
         onBack = onBack,
         snackbar = snackbar,
-        fab = {
-            ExtendedFloatingActionButton(
-                onClick = { editing = EditTarget(null) },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Nouvelle activité") },
-            )
+        actions = {
+            TextButton(onClick = { editing = EditTarget(null) }) {
+                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Nouvelle")
+            }
         },
     ) { padding ->
         val all = list ?: return@ScreenScaffold
         val visible = all.filter { !it.archived }
         val archived = all.filter { it.archived }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 96.dp)) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = 20.dp,
+                end = 8.dp,
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + 32.dp,
+            ),
+        ) {
             item {
                 Text(
-                    "L'ordre ci-dessous est celui des raccourcis. Renommer une activité renomme aussi son historique. " +
-                        "Archiver la retire des raccourcis sans effacer ses sessions.",
+                    "Dans l'ordre des raccourcis. Renommer s'applique aussi à l'historique ; " +
+                        "archiver retire l'activité des raccourcis sans effacer ses sessions.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(16.dp),
+                    color = muted,
+                    modifier = Modifier.padding(end = 12.dp, top = 4.dp, bottom = 12.dp),
                 )
             }
             items(visible, key = { it.id }) { a ->
                 val index = visible.indexOf(a)
                 ActivityRow(a, onClick = { editing = EditTarget(a) }) {
-                    IconButton(onClick = { vm.move(a.id, -1) }, enabled = index > 0) {
-                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Monter ${a.name}")
+                    val colors = IconButtonDefaults.iconButtonColors(contentColor = muted)
+                    IconButton(onClick = { vm.move(a.id, -1) }, enabled = index > 0, colors = colors) {
+                        Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "Monter ${a.name}")
                     }
-                    IconButton(onClick = { vm.move(a.id, 1) }, enabled = index < visible.lastIndex) {
-                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Descendre ${a.name}")
+                    IconButton(onClick = { vm.move(a.id, 1) }, enabled = index < visible.lastIndex, colors = colors) {
+                        Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Descendre ${a.name}")
                     }
                 }
-                HorizontalDivider()
             }
             if (archived.isNotEmpty()) {
-                item { SectionTitle("Archivées", Modifier.padding(horizontal = 16.dp)) }
+                item { SectionHeader("Archivées", Modifier.padding(end = 12.dp)) }
                 items(archived, key = { it.id }) { a ->
                     ActivityRow(a, onClick = { editing = EditTarget(a) }) {
                         TextButton(onClick = { vm.setArchived(a.id, false) }) { Text("Restaurer") }
                     }
-                    HorizontalDivider()
                 }
             }
         }
@@ -162,14 +170,20 @@ private fun ActivityRow(a: TrackedActivity, onClick: () -> Unit, trailing: @Comp
     Row(
         Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick, onClickLabel = "Modifier")
-            .heightIn(min = 64.dp)
-            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            .heightIn(min = 56.dp)
+            .padding(start = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ActivityBadge(a)
-        Spacer(Modifier.width(12.dp))
-        Text(a.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        ActivityMarker(a)
+        Spacer(Modifier.width(14.dp))
+        Text(
+            a.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (a.archived) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
         trailing()
     }
 }
@@ -185,46 +199,65 @@ private fun ActivityEditDialog(
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     var color by remember { mutableStateOf(initial?.color ?: DefaultActivities.palette.first()) }
     var icon by remember { mutableStateOf(initial?.icon) }
+    val scheme = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "Nouvelle activité" else "Modifier l'activité") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it.take(40) }, label = { Text("Nom") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text("Couleur", style = MaterialTheme.typography.labelLarge)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DefaultActivities.palette.forEach { c ->
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(40) },
+                    label = { Text("Nom") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = scheme.onSurface,
+                        unfocusedBorderColor = scheme.outlineVariant,
+                        focusedLabelColor = scheme.onSurface,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                FieldLabel("Couleur")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DefaultActivities.palette.forEachIndexed { i, c ->
                         val isSelected = c == color
                         Box(
                             Modifier
-                                .size(44.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(Color(c))
-                                .border(BorderStroke(if (isSelected) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface), CircleShape)
+                                .then(if (isSelected) Modifier.border(2.dp, scheme.onSurface, CircleShape) else Modifier)
                                 .clickable { color = c }
                                 .semantics {
-                                    contentDescription = "Couleur ${DefaultActivities.palette.indexOf(c) + 1}"
+                                    contentDescription = "Couleur ${i + 1}"
                                     selected = isSelected
                                 },
                             contentAlignment = Alignment.Center,
-                        ) { if (isSelected) Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White) }
+                        ) {
+                            Box(Modifier.size(26.dp).clip(CircleShape).background(Color(c)))
+                        }
                     }
                 }
-                Text("Icône", style = MaterialTheme.typography.labelLarge)
+                FieldLabel("Icône (facultative)")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     DefaultActivities.iconChoices.forEach { e ->
                         val isSelected = e == icon
                         Box(
                             Modifier
-                                .size(44.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(if (isSelected) Color(color).copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceContainerHighest)
+                                .background(if (isSelected) scheme.surfaceContainerHighest else Color.Transparent)
                                 .clickable { icon = if (isSelected) null else e }
                                 .semantics { selected = isSelected },
                             contentAlignment = Alignment.Center,
                         ) { Text(e, style = MaterialTheme.typography.titleMedium) }
                     }
                 }
+                Text(
+                    "Les icônes s'affichent si l'option « Icônes des activités » est activée dans les réglages.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
                 if (onArchive != null) {
                     TextButton(onClick = onArchive) { Text("Archiver cette activité") }
                 }

@@ -1,4 +1,4 @@
-# Vérifications effectuées (version 0.1.0)
+# Vérifications effectuées (version 0.1.0, interface épurée)
 
 Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, Android SDK 36.
 **Aucun test sur appareil physique ni sur émulateur.** Les tests Android ont tourné sous Robolectric
@@ -8,9 +8,9 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 
 | Vérification | Commande | Résultat |
 |--------------|----------|----------|
-| Compilation debug | `./gradlew :app:assembleDebug` | OK : APK de 13,8 Mo, `fr.montemps.debug`, targetSdk 36 |
+| Compilation debug | `./gradlew :app:assembleDebug` | OK : APK de 14,2 Mo, `fr.montemps.debug`, targetSdk 36 |
 | Compilation release (R8) | `./gradlew :app:assembleRelease` | OK : APK non signée de 1,9 Mo |
-| Tests unitaires + Robolectric | `./gradlew :app:testDebugUnitTest` | **50/50 réussis** |
+| Tests unitaires + Robolectric | `./gradlew :app:testDebugUnitTest` | **53/53 réussis** |
 | Android Lint | `./gradlew :app:lintDebug` | 0 erreur ; 1 avertissement (`localeConfig` ignoré sous API 33, sans effet) |
 | Permissions de l'APK | `aapt2 dump badging` | `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED` uniquement (+ permission interne générée par AndroidX) |
 
@@ -43,6 +43,7 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 | CSV | `BackupTest.csvIsSpreadsheetFriendly` |
 | Notification : chronomètre natif, `when` = début, silencieuse, ongoing, catégorie, actions | `NotificationTest.startingShowsSilentChronometerNotificationWithFavorites` |
 | Actions de notification (répétées) via la logique commune | `NotificationTest.notificationActionsSwitchAndStopThroughSharedLogic` |
+| Émojis dans la notification selon l'option d'affichage | `NotificationTest.iconsInNotificationFollowDisplayPreference` |
 | Masquage du nom sur l'écran verrouillé | `NotificationTest.hideNameOnLockScreenUsesPrivateVisibilityWithNeutralPublicVersion` |
 | Notification balayée non republiée | `NotificationTest.dismissedNotificationIsNotRepostedUntilNextTransition` |
 | Permission refusée puis accordée | `NotificationTest.trackingWorksWithoutNotificationPermission` |
@@ -55,17 +56,31 @@ PendingIntent (en vérifiant cible, type et immutabilité) et appellent `onRecei
 ## Vérification visuelle
 
 `ScreenshotTest` rend les vrais écrans (navigation par clics, données en base, horloge figée au
-mercredi 4 novembre 2026 15:42) sur un gabarit de 412 × 892 dp, en clair, sombre et texte ×1,8.
-Les PNG sont dans `docs/screenshots/` et ont été relus : lisibilité, état actif reconnaissable sans
-la couleur (cadre épais, coche, « En cours »), état vide, refus de chevauchement, boîte « session
-oubliée ». Correction apportée après relecture : libellés de la barre du bas tronqués proprement
-en très grand texte.
+mercredi 4 novembre 2026 15:42) sur un gabarit de 412 × 892 dp, en clair, en sombre, en texte ×1,8
+et avec l'option « Icônes des activités ». Les PNG sont dans `docs/screenshots/` et ont été relus
+après la refonte visuelle :
 
-`14-notification.png` est le rendu Android de la vue étendue de la notification. **La valeur du
-chronomètre dans l'en-tête de cette image est un artefact** (horloge système simulée de
-Robolectric) ; la valeur réelle (`when` = début de session, chronomètre activé) est vérifiée par
-`NotificationTest`. Le rendu HyperOS réel (couleurs, actions visibles, écran verrouillé) n'a pas
-pu être vérifié.
+| Fichier | Contenu |
+|---------|---------|
+| `01-aujourdhui`, `02-aujourdhui-sombre` | Activité en cours, chronomètre, raccourcis, bilan du jour |
+| `03-historique`, `16-historique-sombre` | Sessions du jour, session à cheval sur minuit |
+| `04-modifier-session`, `09-chevauchement-refuse` | Correction, refus d'un chevauchement |
+| `05-bilan-jour`, `06-bilan-semaine`, `06b-bilan-semaine-page-entiere`, `17-bilan-semaine-sombre` | Bilans |
+| `07-reglages`, `08-activites` | Réglages, gestion des activités |
+| `10-aujourdhui-grand-texte` | Taille de texte ×1,8 (une colonne, chronomètre ajusté) |
+| `11-premier-lancement` | État vide « Aucune activité en cours » |
+| `12-session-oubliee`, `13-session-oubliee-correction` | Session oubliée |
+| `14-notification` | Vue étendue de la notification construite par Android |
+| `18-aujourdhui-icones` | Option « Icônes des activités » |
+
+Points vérifiés à la relecture : les dix raccourcis tiennent sur un écran, l'activité active est
+reconnaissable sans la couleur (négatif + « En cours »), le chronomètre reste sur une ligne en très
+grand texte, contrastes suffisants en clair comme en sombre, les états vides sont explicites.
+
+`14-notification.png` : **la valeur du chronomètre dans l'en-tête de cette image est un artefact**
+(horloge système simulée de Robolectric) ; la valeur réelle (`when` = début de session, chronomètre
+activé) est vérifiée par `NotificationTest`. Le rendu HyperOS réel (couleurs, actions visibles,
+écran verrouillé) n'a pas pu être vérifié.
 
 ## Non vérifié / limites connues
 
@@ -83,6 +98,8 @@ pu être vérifié.
 - Les bilans utilisent le fuseau courant : après un voyage, les jours passés sont redécoupés selon
   le nouveau fuseau (les durées totales ne changent pas).
 - Pas d'annulation (« undo ») après suppression : une confirmation est demandée à la place.
+- Les nouvelles couleurs par défaut des activités ne s'appliquent qu'à une installation neuve ;
+  sur une installation existante, les couleurs se changent dans Réglages → Gérer les activités.
 - Restauration = remplacement complet (pas de fusion).
 - Live Updates / Always-on Display : hors périmètre.
 

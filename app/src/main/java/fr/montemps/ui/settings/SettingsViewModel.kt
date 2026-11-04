@@ -48,6 +48,7 @@ class SettingsViewModel(private val c: AppContainer) : ViewModel() {
 
     fun setNotificationEnabled(v: Boolean) = update { c.preferences.setNotificationEnabled(v) }
     fun setHideName(v: Boolean) = update { c.preferences.setHideNameOnLockScreen(v) }
+    fun setShowIcons(v: Boolean) = update { c.preferences.setShowIcons(v) }
     fun setThreshold(h: Int) = update { c.preferences.setForgottenThresholdHours(h) }
     fun reshowNotification() = viewModelScope.launch { c.notifications.reshow() }
 

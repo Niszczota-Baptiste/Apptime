@@ -12,6 +12,7 @@ import fr.montemps.domain.SessionError
 import fr.montemps.domain.TransitionResult
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.domain.report.Fmt
+import fr.montemps.domain.report.PeriodReport
 import fr.montemps.domain.time.TimeSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -41,7 +42,16 @@ fun displayTicker(time: TimeSource, periodMs: Long = 1_000): Flow<Instant> = flo
     }
 }
 
-fun TrackedActivity.label(): String = listOfNotNull(icon, name).joinToString(" ")
+/** Libellé d'une activité, précédé de son émoji si l'option « Icônes des activités » est active. */
+fun TrackedActivity.label(showIcons: Boolean): String =
+    if (showIcons) listOfNotNull(icon?.takeIf { it.isNotBlank() }, name).joinToString(" ") else name
+
+/** Couverture d'une période : le temps non suivi n'est jamais attribué à une activité. */
+fun coverageText(report: PeriodReport): String = when {
+    !report.hasStarted -> "Période à venir."
+    report.isFullyTracked -> "Toute la période écoulée est suivie."
+    else -> "Non suivi : ${Fmt.short(report.untracked)} sur ${Fmt.short(report.elapsed)} écoulées"
+}
 
 fun TransitionResult.Reason.message(): String = when (this) {
     TransitionResult.Reason.UNKNOWN_ACTIVITY -> "Cette activité n'existe plus."

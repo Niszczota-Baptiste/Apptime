@@ -26,6 +26,8 @@ data class AppPreferences(
     /** Session dont l'utilisateur a balayé la notification : on ne la republie pas d'office. */
     val dismissedNotificationSessionId: Long? = null,
     val notificationPermissionAsked: Boolean = false,
+    /** Affichage uniquement (non sauvegardé) : émojis des activités au lieu des pastilles de couleur. */
+    val showIcons: Boolean = false,
 ) {
     companion object {
         const val MAX_FAVORITES = 2
@@ -43,6 +45,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val ackSession = longPreferencesKey("ack_session_id")
         val dismissedSession = longPreferencesKey("dismissed_notification_session_id")
         val permissionAsked = booleanPreferencesKey("notification_permission_asked")
+        val showIcons = booleanPreferencesKey("show_icons")
     }
 
     val preferences: Flow<AppPreferences> = dataStore.data.map { p ->
@@ -55,6 +58,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             acknowledgedSessionId = p[Keys.ackSession],
             dismissedNotificationSessionId = p[Keys.dismissedSession],
             notificationPermissionAsked = p[Keys.permissionAsked] ?: false,
+            showIcons = p[Keys.showIcons] ?: false,
         )
     }.distinctUntilChanged()
 
@@ -69,6 +73,7 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setHideNameOnLockScreen(hide: Boolean) = dataStore.edit { it[Keys.hideName] = hide }
     suspend fun setForgottenThresholdHours(hours: Int) = dataStore.edit { it[Keys.threshold] = hours }
     suspend fun acknowledgeSession(id: Long) = dataStore.edit { it[Keys.ackSession] = id }
+    suspend fun setShowIcons(show: Boolean) = dataStore.edit { it[Keys.showIcons] = show }
     suspend fun setNotificationPermissionAsked() = dataStore.edit { it[Keys.permissionAsked] = true }
 
     suspend fun setDismissedNotificationSession(id: Long?) = dataStore.edit {

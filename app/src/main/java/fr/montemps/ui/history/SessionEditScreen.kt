@@ -13,17 +13,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,14 +34,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.montemps.ui.ScreenScaffold
-import fr.montemps.ui.components.ActivityBadge
+import fr.montemps.ui.components.ActivityMarker
 import fr.montemps.ui.components.DateTimeField
+import fr.montemps.ui.components.FieldLabel
+import fr.montemps.ui.components.NoteBox
+import fr.montemps.ui.components.PillButton
+import fr.montemps.ui.components.SelectorField
 
 @Composable
 fun SessionEditScreen(vm: SessionEditViewModel, onDone: () -> Unit) {
@@ -49,12 +55,13 @@ fun SessionEditScreen(vm: SessionEditViewModel, onDone: () -> Unit) {
     var chooseActivity by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     LaunchedEffect(s.done) { if (s.done) onDone() }
+    val scheme = MaterialTheme.colorScheme
 
     ScreenScaffold(
         title = if (s.isNew) "Nouvelle session" else "Modifier la session",
         onBack = onDone,
         actions = {
-            if (!s.isNew) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, contentDescription = "Supprimer") }
+            if (!s.isNew) IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Outlined.Delete, contentDescription = "Supprimer") }
         },
     ) { padding ->
         if (s.loading) return@ScreenScaffold
@@ -63,51 +70,58 @@ fun SessionEditScreen(vm: SessionEditViewModel, onDone: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             val activity = s.activities.firstOrNull { it.id == s.activityId }
-            Text("Activité", style = MaterialTheme.typography.labelLarge)
-            OutlinedButton(onClick = { chooseActivity = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                if (activity != null) {
-                    ActivityBadge(activity, size = 32.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(activity.name, modifier = Modifier.weight(1f))
-                } else {
-                    Text("Choisir une activité", modifier = Modifier.weight(1f))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FieldLabel("Activité")
+                SelectorField(onClick = { chooseActivity = true }) {
+                    if (activity != null) {
+                        ActivityMarker(activity)
+                        Spacer(Modifier.width(12.dp))
+                        Text(activity.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    } else {
+                        Text("Choisir une activité", style = MaterialTheme.typography.bodyLarge, color = scheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                    }
+                    Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = scheme.onSurfaceVariant)
                 }
             }
             DateTimeField("Début", s.start, vm::setStart, enabled = !s.isActive)
             if (s.isActive) {
-                Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {
-                    Text(
-                        "Session en cours : seuls l'activité et la note sont modifiables. Pour corriger le début, " +
-                            "arrêtez le suivi puis modifiez la session terminée dans l'historique.",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+                NoteBox(
+                    "Session en cours : seuls l'activité et la note sont modifiables. Pour corriger le début, " +
+                        "arrêtez le suivi puis modifiez la session terminée.",
+                )
             } else {
                 DateTimeField("Fin", s.end, vm::setEnd)
             }
-            OutlinedTextField(
-                value = s.note,
-                onValueChange = vm::setNote,
-                label = { Text("Note (facultative)") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FieldLabel("Note")
+                OutlinedTextField(
+                    value = s.note,
+                    onValueChange = vm::setNote,
+                    placeholder = { Text("Facultative") },
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = scheme.onSurface,
+                        unfocusedBorderColor = scheme.outlineVariant,
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+            }
             s.error?.let {
                 Text(
                     it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyLarge,
+                    color = scheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
-            Button(onClick = vm::save, enabled = !s.saving, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                Text("Enregistrer")
-            }
+            PillButton("Enregistrer", onClick = vm::save, enabled = !s.saving, modifier = Modifier.fillMaxWidth())
         }
     }
 
@@ -122,14 +136,15 @@ fun SessionEditScreen(vm: SessionEditViewModel, onDone: () -> Unit) {
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 56.dp)
+                                .heightIn(min = 52.dp)
+                                .clip(RoundedCornerShape(12.dp))
                                 .clickable { vm.setActivity(a.id); chooseActivity = false }
-                                .padding(vertical = 8.dp),
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            ActivityBadge(a, size = 36.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Text(a.name + if (a.archived) " (archivée)" else "", style = MaterialTheme.typography.titleMedium)
+                            ActivityMarker(a)
+                            Spacer(Modifier.width(14.dp))
+                            Text(a.name + if (a.archived) " · archivée" else "", style = MaterialTheme.typography.bodyLarge)
                         }
                     }
                 }
@@ -151,3 +166,4 @@ fun SessionEditScreen(vm: SessionEditViewModel, onDone: () -> Unit) {
         )
     }
 }
+

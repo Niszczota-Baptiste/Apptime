@@ -2,37 +2,53 @@
 
 package fr.montemps.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -40,8 +56,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import fr.montemps.MonTempsApp
+import fr.montemps.data.prefs.AppPreferences
 import fr.montemps.ui.activities.ActivitiesScreen
 import fr.montemps.ui.activities.ActivitiesViewModel
+import fr.montemps.ui.components.AppIcons
+import fr.montemps.ui.components.LocalShowIcons
 import fr.montemps.ui.history.HistoryScreen
 import fr.montemps.ui.history.HistoryViewModel
 import fr.montemps.ui.history.SessionEditScreen
@@ -54,11 +74,11 @@ import fr.montemps.ui.today.TodayScreen
 import fr.montemps.ui.today.TodayViewModel
 import java.time.LocalDate
 
-private enum class TopLevel(val route: String, val label: String, val icon: ImageVector) {
-    TODAY("today", "Aujourd'hui", Icons.Filled.Home),
-    HISTORY("history", "Historique", Icons.AutoMirrored.Filled.List),
-    REPORTS("reports", "Bilans", Icons.Filled.DateRange),
-    SETTINGS("settings", "Réglages", Icons.Filled.Settings),
+private enum class TopLevel(val route: String, val label: String, val icon: () -> ImageVector) {
+    TODAY("today", "Aujourd'hui", { AppIcons.Timer }),
+    HISTORY("history", "Historique", { AppIcons.History }),
+    REPORTS("reports", "Bilans", { AppIcons.Chart }),
+    SETTINGS("settings", "Réglages", { Icons.Outlined.Settings }),
 }
 
 /** Vrai lorsque la barre de navigation du bas gère déjà l'encart inférieur. */
@@ -70,30 +90,24 @@ fun MonTempsNavHost(startRoute: String = TopLevel.TODAY.route) {
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val showBottomBar = TopLevel.entries.any { it.route == route } || route == null
+    val container = (LocalContext.current.applicationContext as MonTempsApp).container
+    val prefs by container.preferences.preferences.collectAsStateWithLifecycle(initialValue = AppPreferences())
+
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
-                    TopLevel.entries.forEach { tl ->
-                        NavigationBarItem(
-                            selected = route == tl.route,
-                            onClick = {
-                                nav.navigate(tl.route) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(tl.icon, contentDescription = null) },
-                            label = { Text(tl.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        )
+                BottomBar(route) { tl ->
+                    nav.navigate(tl.route) {
+                        popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
                     }
                 }
             }
         },
     ) { outer ->
-        CompositionLocalProvider(LocalHasBottomBar provides showBottomBar) {
+        CompositionLocalProvider(LocalHasBottomBar provides showBottomBar, LocalShowIcons provides prefs.showIcons) {
             NavHost(nav, startDestination = startRoute, modifier = Modifier.padding(outer).consumeWindowInsets(outer)) {
                 composable(TopLevel.TODAY.route) {
                     TodayScreen(
@@ -129,13 +143,56 @@ fun MonTempsNavHost(startRoute: String = TopLevel.TODAY.route) {
     }
 }
 
-/** Échafaudage commun : barre de titre, retour éventuel, snackbar et bouton flottant. */
+/** Barre du bas épurée : filet fin, icônes au trait, onglet actif en encre et en gras. */
+@Composable
+private fun BottomBar(current: String?, onSelect: (TopLevel) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().background(scheme.background)) {
+        HorizontalDivider(thickness = 0.5.dp, color = scheme.outlineVariant)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 8.dp)
+                .selectableGroup(),
+        ) {
+            TopLevel.entries.forEach { tl ->
+                val selected = current == tl.route
+                val color = if (selected) scheme.onSurface else scheme.onSurfaceVariant
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(tl) })
+                        .padding(top = 10.dp, bottom = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(tl.icon(), contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        tl.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = color,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Échafaudage commun. Écrans principaux : pas de barre d'application (le titre fait partie du
+ * contenu). Sous-écrans : barre compacte et transparente avec retour.
+ */
 @Composable
 fun ScreenScaffold(
-    title: String,
+    title: String? = null,
     onBack: (() -> Unit)? = null,
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
-    actions: @Composable () -> Unit = {},
+    actions: @Composable RowScope.() -> Unit = {},
     fab: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
@@ -147,15 +204,19 @@ fun ScreenScaffold(
     Scaffold(
         contentWindowInsets = insets,
         topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
-                    }
-                },
-                actions = { actions() },
-            )
+            if (onBack != null) {
+                TopAppBar(
+                    title = { Text(title.orEmpty(), style = MaterialTheme.typography.titleMedium) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Retour") }
+                    },
+                    actions = actions,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = fab,

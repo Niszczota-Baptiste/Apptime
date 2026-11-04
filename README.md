@@ -21,6 +21,18 @@ Cible : POCO X8 Pro Max (Android 16 / HyperOS 3). Compatible Android 8.0 (API 26
 - **Session oubliée** : à la réouverture, après un seuil réglable ou un redémarrage du téléphone,
   l'app propose de continuer ou de corriger l'heure de fin. Rien n'est inventé.
 
+## Interface
+
+Pensée pour ne pas distraire :
+
+- palette neutre « encre / papier », clair ou sombre selon le système, sans couleurs dynamiques ;
+- les couleurs des activités (teintes douces) sont les seuls accents, sous forme de pastilles ;
+- un grand chronomètre en graisse fine, à chiffres fixes, au centre de l'écran ;
+- l'activité en cours est affichée en négatif (fond encre) avec la mention « En cours » ;
+- les dix raccourcis tiennent sur un écran, et ne bougent pas quand on démarre ou arrête ;
+- pas de cartes ni d'ombres, une barre de navigation fine, des titres intégrés au contenu ;
+- option « Icônes des activités » (Réglages → Affichage) pour remplacer les pastilles par des émojis.
+
 Captures (rendues par les tests, données réelles en base) : [`docs/screenshots/`](docs/screenshots).
 
 ## Installation de l'APK de développement
@@ -40,7 +52,7 @@ Prérequis : JDK 17 ou plus récent, Android SDK (plateforme 36). Le wrapper Gra
 ```bash
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties   # ou variable ANDROID_HOME
 ./gradlew :app:assembleDebug          # APK : app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (≈ 50 tests)
+./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (53 tests, régénère les captures)
 ./gradlew :app:lintDebug              # analyse Android Lint
 ./gradlew :app:assembleRelease        # APK release minifiée (non signée : configurer un keystore)
 ```

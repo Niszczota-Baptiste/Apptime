@@ -6,13 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -34,7 +31,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * Ligne « Libellé : [date] [heure] ». Les sélecteurs Material 3 manipulent des dates en UTC ;
+ * « Libellé : [date] [heure] ». Les sélecteurs Material 3 manipulent des dates en UTC ;
  * la conversion se fait ici, en dates locales sans fuseau.
  */
 @Composable
@@ -46,19 +43,16 @@ fun DateTimeField(
 ) {
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(
-                onClick = { showDate = true },
-                enabled = enabled,
-                modifier = Modifier.weight(1.4f).heightIn(min = 52.dp),
-            ) { Text(Fmt.dayMedium(value.toLocalDate())) }
-            OutlinedButton(
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FieldLabel(label)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            FieldChip(Fmt.dayMedium(value.toLocalDate()), onClick = { showDate = true }, enabled = enabled, modifier = Modifier.weight(1.4f))
+            FieldChip(
+                value.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm")),
                 onClick = { showTime = true },
                 enabled = enabled,
-                modifier = Modifier.weight(1f).heightIn(min = 52.dp),
-            ) { Text(value.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))) }
+                modifier = Modifier.weight(1f),
+            )
         }
     }
     if (showDate) {
