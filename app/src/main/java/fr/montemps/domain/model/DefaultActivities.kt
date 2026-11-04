@@ -20,8 +20,8 @@ object DefaultActivities {
     val all: List<TrackedActivity> = listOf(
         TrackedActivity(WORK, "Travail", 0xFF4A78E0.toInt(), null, 0, false),
         TrackedActivity(DRIVING, "Conduite", 0xFF8D6E63.toInt(), null, 1, false),
-        TrackedActivity(BREAK, "Pause", 0xFFE3A33B.toInt(), null, 2, false),
-        TrackedActivity(MEAL, "Repas", 0xFFE07A5F.toInt(), null, 3, false),
+        TrackedActivity(BREAK, "Pause", 0xFFE3A33B.toInt(), null, 2, false, interruption = true),
+        TrackedActivity(MEAL, "Repas", 0xFFE07A5F.toInt(), null, 3, false, interruption = true),
         TrackedActivity(KOREAN, "Coréen", 0xFF8E7CC3.toInt(), null, 4, false),
         TrackedActivity(SPORT, "Sport", 0xFF3FA36B.toInt(), null, 5, false),
         TrackedActivity(WRITING, "Écriture", 0xFF2A9D8F.toInt(), null, 6, false),
@@ -29,6 +29,9 @@ object DefaultActivities {
         TrackedActivity(FREE_TIME, "Temps libre", 0xFF8AB17D.toInt(), null, 8, false),
         TrackedActivity(OTHER, "Autre", 0xFF9A9AA0.toInt(), null, 9, false),
     )
+
+    /** Activités d'interruption par défaut (pour les sauvegardes antérieures à cette notion). */
+    val interruptionIds = setOf(BREAK, MEAL)
 
     /** Favorites par défaut pour les actions rapides de la notification. */
     val defaultFavorites = listOf(BREAK, WORK)

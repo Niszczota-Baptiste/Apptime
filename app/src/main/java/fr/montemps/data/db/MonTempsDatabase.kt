@@ -6,10 +6,11 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import fr.montemps.domain.model.DefaultActivities
 
-@Database(entities = [ActivityEntity::class, SessionEntity::class], version = 1, exportSchema = true)
+@Database(entities = [ActivityEntity::class, SessionEntity::class], version = 2, exportSchema = true)
 abstract class MonTempsDatabase : RoomDatabase() {
     abstract fun activityDao(): ActivityDao
     abstract fun sessionDao(): SessionDao
@@ -23,7 +24,20 @@ abstract class MonTempsDatabase : RoomDatabase() {
             } else {
                 Room.databaseBuilder(context, MonTempsDatabase::class.java, FILE_NAME)
             }
-            return builder.addCallback(Callbacks).build()
+            return builder.addCallback(Callbacks).addMigrations(MIGRATION_1_2).build()
+        }
+
+        /**
+         * Version 2 : activités d'interruption et objectifs. Les données existantes sont conservées ;
+         * Pause et Repas (identifiants stables) deviennent des interruptions.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE activities ADD COLUMN interruption INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE activities ADD COLUMN goal_minutes INTEGER")
+                db.execSQL("ALTER TABLE activities ADD COLUMN goal_period TEXT")
+                db.execSQL("UPDATE activities SET interruption = 1 WHERE id IN ('break', 'meal')")
+            }
         }
     }
 
@@ -46,6 +60,11 @@ abstract class MonTempsDatabase : RoomDatabase() {
                         put("icon", a.icon)
                         put("sort_order", a.sortOrder)
                         put("archived", if (a.archived) 1 else 0)
+                        put("interruption", if (a.interruption) 1 else 0)
+                        a.goal?.let {
+                            put("goal_minutes", it.minutes)
+                            put("goal_period", it.period.id)
+                        }
                     },
                 )
             }

@@ -3,6 +3,9 @@
 
     <!-- Notification de suivi (autorisation demandée à l'exécution sur Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 16+ : afficher le suivi en « Live Update » (puce dans la barre d'état). Permission
+         normale (non demandée à l'exécution) ; l'utilisateur peut la désactiver dans les réglages. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <!-- Republier la notification d'une session en cours après un redémarrage du téléphone. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 

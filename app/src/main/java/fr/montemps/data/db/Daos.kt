@@ -53,8 +53,11 @@ interface SessionDao {
     )
     fun observeOverlapping(fromMs: Long, toMs: Long): Flow<List<SessionEntity>>
 
-    @Query("SELECT * FROM sessions WHERE end_utc_ms IS NOT NULL ORDER BY end_utc_ms DESC LIMIT 1")
-    suspend fun lastEnded(): SessionEntity?
+    @Query("SELECT * FROM sessions WHERE end_utc_ms IS NOT NULL ORDER BY end_utc_ms DESC LIMIT :limit")
+    suspend fun recentEnded(limit: Int): List<SessionEntity>
+
+    @Query("SELECT * FROM sessions WHERE end_utc_ms IS NOT NULL ORDER BY end_utc_ms DESC LIMIT :limit")
+    fun observeRecentEnded(limit: Int): Flow<List<SessionEntity>>
 
     @Query("SELECT MAX(end_utc_ms) FROM sessions")
     suspend fun latestEnd(): Long?

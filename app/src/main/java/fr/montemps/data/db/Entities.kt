@@ -5,6 +5,8 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import fr.montemps.domain.model.Goal
+import fr.montemps.domain.model.GoalPeriod
 import fr.montemps.domain.model.Session
 import fr.montemps.domain.model.TrackedActivity
 import java.time.Instant
@@ -17,6 +19,12 @@ data class ActivityEntity(
     val icon: String?,
     @ColumnInfo(name = "sort_order") val sortOrder: Int,
     val archived: Boolean,
+    /** Ajouté en version 2 de la base. */
+    @ColumnInfo(name = "interruption", defaultValue = "0") val interruption: Boolean = false,
+    /** Objectif en minutes (version 2) ; NULL = aucun objectif. */
+    @ColumnInfo(name = "goal_minutes") val goalMinutes: Int? = null,
+    /** « day » ou « week » (version 2). */
+    @ColumnInfo(name = "goal_period") val goalPeriod: String? = null,
 )
 
 @Entity(
@@ -45,8 +53,33 @@ data class SessionEntity(
     val source: String,
 )
 
-fun ActivityEntity.toDomain() = TrackedActivity(id, name, color, icon, sortOrder, archived)
-fun TrackedActivity.toEntity() = ActivityEntity(id, name, color, icon, sortOrder, archived)
+fun ActivityEntity.toDomain() = TrackedActivity(
+    id = id,
+    name = name,
+    color = color,
+    icon = icon,
+    sortOrder = sortOrder,
+    archived = archived,
+    interruption = interruption,
+    goal = goalOf(goalMinutes, goalPeriod),
+)
+
+fun TrackedActivity.toEntity() = ActivityEntity(
+    id = id,
+    name = name,
+    color = color,
+    icon = icon,
+    sortOrder = sortOrder,
+    archived = archived,
+    interruption = interruption,
+    goalMinutes = goal?.minutes,
+    goalPeriod = goal?.period?.id,
+)
+
+private fun goalOf(minutes: Int?, period: String?): Goal? {
+    val p = GoalPeriod.of(period) ?: return null
+    return if (minutes != null && minutes > 0) Goal(minutes, p) else null
+}
 
 fun SessionEntity.toDomain() = Session(
     id = id,

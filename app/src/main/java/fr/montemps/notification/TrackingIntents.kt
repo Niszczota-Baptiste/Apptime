@@ -46,10 +46,24 @@ object TrackingIntents {
             putExtra(TrackingActionReceiver.EXTRA_SESSION_ID, sessionId)
         }
 
-    fun openApp(context: Context): PendingIntent {
+    fun idleReminder(context: Context): PendingIntent =
+        broadcast(context, TrackingActionReceiver.ACTION_IDLE, "idle") { }
+
+    fun eveningSummary(context: Context): PendingIntent =
+        broadcast(context, TrackingActionReceiver.ACTION_SUMMARY, "summary") { }
+
+    fun autoBackup(context: Context): PendingIntent =
+        broadcast(context, TrackingActionReceiver.ACTION_AUTO_BACKUP, "backup") { }
+
+    const val DESTINATION_REPORTS = "reports"
+
+    /** Ouvre l'app, éventuellement sur un écran donné (ex. [DESTINATION_REPORTS]). */
+    fun openApp(context: Context, destination: String? = null): PendingIntent {
         val intent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        if (destination != null) intent.putExtra(MainActivity.EXTRA_DESTINATION, destination)
+        val requestCode = if (destination == null) 0 else 1 + destination.hashCode().and(0xFFFF)
+        return PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
     private inline fun broadcast(

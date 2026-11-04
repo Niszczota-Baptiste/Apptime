@@ -1,13 +1,17 @@
 package fr.montemps
 
 import android.content.Context
+import androidx.core.net.toUri
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import fr.montemps.data.RoomTrackingStore
+import fr.montemps.data.backup.AutoBackupController
+import fr.montemps.data.backup.BackupFolder
 import fr.montemps.data.backup.BackupService
+import fr.montemps.data.backup.SafBackupFolder
 import fr.montemps.data.db.MonTempsDatabase
 import fr.montemps.data.prefs.PreferencesRepository
 import fr.montemps.domain.ActivityCatalog
@@ -17,8 +21,11 @@ import fr.montemps.domain.TimeTracker
 import fr.montemps.domain.WriteLock
 import fr.montemps.domain.time.TimeSource
 import fr.montemps.notification.AlarmScheduler
+import fr.montemps.notification.EveningSummaryController
+import fr.montemps.notification.IdleReminderController
 import fr.montemps.notification.NotificationController
 import fr.montemps.notification.ReminderController
+import fr.montemps.notification.TrackingIntents
 import fr.montemps.notification.TrackingNotifier
 import fr.montemps.surfaces.SurfaceStateLoader
 import fr.montemps.surfaces.SurfacesController
@@ -48,7 +55,10 @@ class AppContainer(
     val time: TimeSource = AndroidTimeSource(context),
     database: MonTempsDatabase = MonTempsDatabase.build(context),
     dataStore: DataStore<Preferences> = context.dataStore,
+    /** Dossier de sauvegarde automatique à partir de son URI (remplaçable dans les tests). */
+    backupFolderFor: (String) -> BackupFolder = { SafBackupFolder(context, it.toUri()) },
 ) {
+    val appContext: Context = context.applicationContext
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val store = RoomTrackingStore(database)
     val preferences = PreferencesRepository(dataStore)
@@ -56,6 +66,8 @@ class AppContainer(
     val notifications = NotificationController(store, preferences, notifier, time)
     private val alarms = AlarmScheduler(context)
     val reminders = ReminderController(context, store, preferences, notifier, time, alarms)
+    val idle = IdleReminderController(context, store, preferences, notifier, time, alarms)
+    val summary = EveningSummaryController(context, store, preferences, notifier, time, alarms)
     val surfaces = SurfacesController(context, SurfaceStateLoader(store, preferences, time), alarms, time)
 
     private val lock = WriteLock()
@@ -68,11 +80,15 @@ class AppContainer(
     suspend fun refreshOutputs() {
         notifications.sync()
         reminders.reschedule()
+        idle.reschedule()
+        summary.reschedule()
         surfaces.refresh()
+        autoBackup.reschedule() // en dernier : peut écrire un fichier si la sauvegarde est due
     }
 
     val tracker = TimeTracker(store, time, lock, onChange)
     val editor = SessionEditor(store, time, lock, onChange)
     val catalog = ActivityCatalog(store, lock, onChange)
     val backup = BackupService(store, preferences, lock, time, onChange, BuildConfig.VERSION_NAME)
+    val autoBackup = AutoBackupController(preferences, backup, alarms, time, backupFolderFor) { TrackingIntents.autoBackup(context) }
 }

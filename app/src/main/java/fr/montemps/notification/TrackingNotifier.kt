@@ -24,9 +24,19 @@ data class TrackingNotificationContent(
     val startLabel: String,
     val favorites: List<FavoriteAction>,
     val hideNameOnLockScreen: Boolean,
+    /** « Reprendre Travail » pendant une interruption. */
+    val resume: FavoriteAction? = null,
+    /** Demander l'affichage en « Live Update » (Android 16+ : puce dans la barre d'état). */
+    val promoted: Boolean = false,
 )
 
 data class FavoriteAction(val activityId: String, val label: String)
+
+/** Rappel « rien n'est suivi ». */
+data class IdleContent(val sinceLabel: String, val actions: List<FavoriteAction>)
+
+/** Résumé du soir. */
+data class SummaryContent(val title: String, val text: String)
 
 /** Rappel « session longue » (session peut-être oubliée). */
 data class ReminderContent(
@@ -54,8 +64,11 @@ class TrackingNotifier(private val context: Context) {
     companion object {
         const val CHANNEL_ID = "tracking"
         const val REMINDER_CHANNEL_ID = "reminders"
+        const val SUMMARY_CHANNEL_ID = "summaries"
         const val NOTIFICATION_ID = 1001
         const val REMINDER_ID = 1002
+        const val IDLE_ID = 1003
+        const val SUMMARY_ID = 1004
     }
 
     private val manager = NotificationManagerCompat.from(context)
@@ -86,6 +99,16 @@ class TrackingNotifier(private val context: Context) {
                 setShowBadge(false)
             },
         )
+        system.createNotificationChannel(
+            NotificationChannel(
+                SUMMARY_CHANNEL_ID,
+                context.getString(R.string.summary_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = context.getString(R.string.summary_channel_description)
+                setShowBadge(false)
+            },
+        )
     }
 
     fun hasPermission(): Boolean =
@@ -109,6 +132,15 @@ class TrackingNotifier(private val context: Context) {
 
     fun cancelReminder() = manager.cancel(REMINDER_ID)
 
+    fun showIdle(content: IdleContent) = post(REMINDER_CHANNEL_ID, IDLE_ID) { buildIdle(content) }
+
+    fun cancelIdle() = manager.cancel(IDLE_ID)
+
+    fun showSummary(content: SummaryContent) = post(SUMMARY_CHANNEL_ID, SUMMARY_ID) { buildSummary(content) }
+
+    /** Android 16+ : l'utilisateur autorise-t-il les « Live Updates » de l'app ? */
+    fun canPostPromoted(): Boolean = runCatching { manager.canPostPromotedNotifications() }.getOrDefault(true)
+
     private inline fun post(channelId: String, id: Int, notification: () -> Notification) {
         if (!canPostOn(channelId)) return
         try {
@@ -125,7 +157,13 @@ class TrackingNotifier(private val context: Context) {
             .setContentText(text)
             .setContentIntent(TrackingIntents.openApp(context))
             .setDeleteIntent(TrackingIntents.dismissed(context, content.sessionId))
+            // Live Update (Android 16+) : notification promue, chronomètre visible dans la barre
+            // d'état. Sans effet sur les versions antérieures ou si l'utilisateur l'a désactivé.
+            .setRequestPromotedOngoing(content.promoted)
 
+        content.resume?.let {
+            builder.addAction(0, it.label, TrackingIntents.switchTo(context, it.activityId, CommandSource.Notification))
+        }
         content.favorites.forEach { fav ->
             builder.addAction(0, fav.label, TrackingIntents.switchTo(context, fav.activityId, CommandSource.Notification))
         }
@@ -172,6 +210,43 @@ class TrackingNotifier(private val context: Context) {
             builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         }
         return builder.build()
+    }
+
+    fun buildIdle(content: IdleContent): Notification {
+        val builder = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_tracking)
+            .setContentTitle(context.getString(R.string.idle_title, content.sinceLabel))
+            .setContentText(context.getString(R.string.idle_text))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setShowWhen(false)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setLocalOnly(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(TrackingIntents.openApp(context))
+        content.actions.take(3).forEach {
+            builder.addAction(0, it.label, TrackingIntents.switchTo(context, it.activityId, CommandSource.Notification))
+        }
+        return builder.build()
+    }
+
+    fun buildSummary(content: SummaryContent): Notification {
+        val public = NotificationCompat.Builder(context, SUMMARY_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_tracking)
+            .setContentTitle(context.getString(R.string.summary_public_title))
+            .build()
+        return NotificationCompat.Builder(context, SUMMARY_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_tracking)
+            .setContentTitle(content.title)
+            .setContentText(content.text.lineSequence().first())
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content.text))
+            .setShowWhen(false)
+            .setAutoCancel(true)
+            .setLocalOnly(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(public)
+            .setContentIntent(TrackingIntents.openApp(context, TrackingIntents.DESTINATION_REPORTS))
+            .build()
     }
 
     private fun baseBuilder(content: TrackingNotificationContent) =

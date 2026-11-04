@@ -2,10 +2,12 @@
 
 - Projet Android « Mon Temps » (suivi du temps personnel), interface **entièrement en français**.
 - Lire `docs/ARCHITECTURE.md` avant toute modification de la logique de suivi ou du modèle de données.
-- Toute opération de démarrage / changement / arrêt passe par `domain/TimeTracker` ; toute correction
-  d'historique par `domain/SessionEditor`. Ne jamais écrire dans Room directement depuis l'UI ou un récepteur.
+- Toute opération de démarrage / changement / arrêt (y compris « Annuler » et « Démarrer plus tôt »)
+  passe par `domain/TimeTracker` ; toute correction d'historique par `domain/SessionEditor`.
+  Ne jamais écrire dans Room directement depuis l'UI ou un récepteur.
 - Le paquet `domain` reste en Kotlin pur (aucun import `android.*`).
-- Notification, rappel, widgets et tuile ne se mettent à jour que via `AppContainer.refreshOutputs()`
+- Notifications (suivi, rappels, résumé), widgets, tuile, alarmes et sauvegarde automatique ne se
+  mettent à jour que via `AppContainer.refreshOutputs()`
   (déjà appelé après chaque écriture) ; leurs actions passent par `TrackingIntents` → `TrackingActionReceiver`.
 - Interface sobre : pas d'icônes ni d'émojis pour les activités (nom + pastille de couleur).
 - Changer le schéma Room = incrémenter la version, ajouter une migration et committer `app/schemas/`.

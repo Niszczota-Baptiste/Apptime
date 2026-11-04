@@ -1,5 +1,6 @@
 package fr.montemps.domain
 
+import fr.montemps.domain.model.Goal
 import fr.montemps.domain.model.TrackedActivity
 import java.util.UUID
 
@@ -20,7 +21,13 @@ class ActivityCatalog(
     private val lock: WriteLock,
     private val listener: ChangeListener = ChangeListener { },
 ) {
-    suspend fun create(name: String, color: Int, icon: String?): CatalogResult = write {
+    suspend fun create(
+        name: String,
+        color: Int,
+        icon: String?,
+        interruption: Boolean = false,
+        goal: Goal? = null,
+    ): CatalogResult = write {
         val clean = name.trim()
         validateName(clean, excludeId = null)?.let { return@write CatalogResult.Error(it) }
         val all = store.activities()
@@ -31,16 +38,31 @@ class ActivityCatalog(
             icon = icon?.takeIf { it.isNotBlank() },
             sortOrder = (all.maxOfOrNull { it.sortOrder } ?: -1) + 1,
             archived = false,
+            interruption = interruption,
+            goal = goal,
         )
         store.upsertActivity(activity)
         CatalogResult.Ok(activity)
     }
 
-    suspend fun edit(id: String, name: String, color: Int, icon: String?): CatalogResult = write {
+    suspend fun edit(
+        id: String,
+        name: String,
+        color: Int,
+        icon: String?,
+        interruption: Boolean = false,
+        goal: Goal? = null,
+    ): CatalogResult = write {
         val existing = store.activity(id) ?: return@write CatalogResult.Error("Activité introuvable.")
         val clean = name.trim()
         validateName(clean, excludeId = id)?.let { return@write CatalogResult.Error(it) }
-        val updated = existing.copy(name = clean, color = color, icon = icon?.takeIf { it.isNotBlank() })
+        val updated = existing.copy(
+            name = clean,
+            color = color,
+            icon = icon?.takeIf { it.isNotBlank() },
+            interruption = interruption,
+            goal = goal,
+        )
         store.upsertActivity(updated)
         CatalogResult.Ok(updated)
     }

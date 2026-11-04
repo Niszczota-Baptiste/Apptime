@@ -26,14 +26,16 @@ class BackupTest {
     fun exportThenRestoreRoundTrip() = runBlocking {
         val source = testContainer(time)
         source.editor.addPastSession(WORK, morning, morning.plusHours(2), "note; avec \"guillemets\"")
-        source.catalog.create("Lecture", 0xFF3949AB.toInt(), "📚")
+        source.catalog.create("Lecture", 0xFF3949AB.toInt(), "📚", goal = fr.montemps.domain.model.Goal(20, fr.montemps.domain.model.GoalPeriod.DAY))
+        source.preferences.setEveningSummary(true)
+        source.preferences.setIdleWindow(9 * 60, 21 * 60)
         source.catalog.setArchived(BREAK, true)
         source.preferences.setFavorites(listOf(WORK))
         source.preferences.setHideNameOnLockScreen(true)
         time.now = time.now.plusSeconds(60)
         source.tracker.switchTo(WORK)
         val json = source.backup.exportJson()
-        assertTrue(json.contains("\"formatVersion\": 2"))
+        assertTrue(json.contains("\"formatVersion\": 3"))
 
         val target = testContainer(time)
         target.editor.addPastSession(BREAK, morning.minus(Duration.ofDays(1)), morning.minus(Duration.ofDays(1)).plusHours(1), null)
@@ -46,6 +48,11 @@ class BackupTest {
         val prefs = target.preferences.current()
         assertEquals(listOf(WORK), prefs.favoriteIds)
         assertTrue(prefs.hideNameOnLockScreen)
+        assertTrue(prefs.eveningSummaryEnabled)
+        assertEquals(9 * 60, prefs.idleWindowStartMinutes)
+        val lecture = target.store.activities().first { it.name == "Lecture" }
+        assertEquals(20, lecture.goal!!.minutes)
+        assertTrue(target.store.activity(BREAK)!!.interruption)
     }
 
     @Test
@@ -58,7 +65,7 @@ class BackupTest {
         val cases = mapOf(
             "pas du json" to "{ ceci n'est pas",
             "autre format" to valid.replace("mon-temps-backup", "autre-app"),
-            "version future" to valid.replace("\"formatVersion\": 2", "\"formatVersion\": 99"),
+            "version future" to valid.replace("\"formatVersion\": 3", "\"formatVersion\": 99"),
             "activité inconnue" to valid.replace("\"activityId\": \"work\"", "\"activityId\": \"fantome\""),
             "date invalide" to valid.replace("2026-11-04T07:00:00Z", "hier matin"),
             "session future" to valid.replace("2026-11-04T08:00:00Z", "2030-01-01T00:00:00Z"),
@@ -80,8 +87,12 @@ class BackupTest {
         val r = BackupCodec.decode(v1, time.now) as DecodeResult.Valid
         assertEquals(1, r.snapshot.sessions.size)
         assertEquals(8, r.snapshot.preferences.forgottenThresholdHours)
-        // Champ apparu en v2 : valeur par défaut.
+        // Champs apparus en v2/v3 : valeurs par défaut (Pause et Repas sont des interruptions).
         assertTrue(r.snapshot.preferences.longSessionReminder)
+        assertTrue(!r.snapshot.activities.single().interruption)
+        val v1WithBreak = v1.replace("{\"id\":\"work\"", "{\"id\":\"break\",\"name\":\"Pause\",\"color\":\"#E3A33B\",\"sortOrder\":1},{\"id\":\"work\"")
+        val r2 = BackupCodec.decode(v1WithBreak, time.now) as DecodeResult.Valid
+        assertTrue(r2.snapshot.activities.first { it.id == "break" }.interruption)
     }
 
     @Test

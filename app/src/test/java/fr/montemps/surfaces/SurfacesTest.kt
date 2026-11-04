@@ -123,6 +123,21 @@ class SurfacesTest {
     }
 
     @Test
+    fun duringABreakWidgetAndTileOfferToResumeThePreviousActivity() {
+        val id = widgets.createWidget(TrackingWidgetProvider::class.java, R.layout.widget_tracking)
+        runBlocking {
+            c.tracker.switchTo(WORK)
+            time.advance(Duration.ofMinutes(45))
+            c.tracker.switchTo(BREAK)
+        }
+        val labels = buttons(widgets.getViewFor(id)).map { it.text(R.id.widget_button_label) }
+        assertEquals("Reprendre Travail", labels.first())
+        val tile = TileModel.from(runBlocking { c.surfaces.load() })
+        assertEquals(TileAction.Resume(WORK), tile.action)
+        assertEquals("Reprendre Travail", tile.subtitle)
+    }
+
+    @Test
     fun activitiesWidgetListsShortcutsAndMarksTheActiveOne() {
         val id = widgets.createWidget(ActivitiesWidgetProvider::class.java, R.layout.widget_activities)
         runBlocking { c.tracker.switchTo(WORK) }

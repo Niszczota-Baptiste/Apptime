@@ -23,7 +23,33 @@ data class TrackedActivity(
     val icon: String?,
     val sortOrder: Int,
     val archived: Boolean,
+    /**
+     * Activité d'interruption (Pause, Repas…) : pendant qu'elle est en cours, l'app propose de
+     * « reprendre » l'activité précédente en un appui.
+     */
+    val interruption: Boolean = false,
+    /** Objectif facultatif (par jour ou par semaine). */
+    val goal: Goal? = null,
 )
+
+enum class GoalPeriod(val id: String) {
+    DAY("day"),
+    WEEK("week"),
+    ;
+
+    companion object {
+        fun of(id: String?): GoalPeriod? = entries.firstOrNull { it.id == id }
+    }
+}
+
+/** Objectif de temps pour une activité : [minutes] par jour ou par semaine. */
+data class Goal(val minutes: Int, val period: GoalPeriod) {
+    init {
+        require(minutes > 0) { "Un objectif doit être positif." }
+    }
+
+    val target: Duration get() = Duration.ofMinutes(minutes.toLong())
+}
 
 /**
  * Session de suivi : intervalle semi-ouvert [start, end).

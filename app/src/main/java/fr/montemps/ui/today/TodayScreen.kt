@@ -6,7 +6,12 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,17 +32,21 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -52,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.collectLatest
+import fr.montemps.domain.BackdateLimit
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.report.PeriodReport
@@ -60,6 +71,7 @@ import fr.montemps.ui.components.ActivityMarker
 import fr.montemps.ui.components.ActivityTile
 import fr.montemps.ui.components.DateTimeField
 import fr.montemps.ui.components.DistributionBar
+import fr.montemps.ui.components.GoalRow
 import fr.montemps.ui.components.InfoBanner
 import fr.montemps.ui.components.PageHeader
 import fr.montemps.ui.components.PillButton
@@ -71,6 +83,7 @@ import fr.montemps.ui.components.tabular
 import fr.montemps.ui.coverageText
 import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 
@@ -80,7 +93,19 @@ fun TodayScreen(vm: TodayViewModel, onManageActivities: () -> Unit, onOpenHistor
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    LaunchedEffect(Unit) { vm.events.collect { snackbar.showSnackbar(it) } }
+    var backdating by remember { mutableStateOf<TrackedActivity?>(null) }
+    LaunchedEffect(Unit) {
+        // collectLatest : un nouveau changement remplace le message précédent.
+        vm.events.collectLatest { e ->
+            when (e) {
+                is TodayEvent.Message -> snackbar.showSnackbar(e.text)
+                is TodayEvent.Undoable -> {
+                    val r = snackbar.showSnackbar(e.text, actionLabel = "Annuler", duration = SnackbarDuration.Short)
+                    if (r == SnackbarResult.ActionPerformed) vm.undo(e.token)
+                }
+            }
+        }
+    }
 
     // État de l'autorisation de notification, réévalué à chaque retour sur l'écran.
     var canNotify by remember { mutableStateOf(true) }
@@ -122,11 +147,30 @@ fun TodayScreen(vm: TodayViewModel, onManageActivities: () -> Unit, onOpenHistor
                 vm.onActivityTap(id)
             },
             onStop = vm::onStop,
+            onLongPress = { backdating = it },
+            onResume = { id ->
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                vm.onActivityTap(id)
+            },
             onRequestNotifications = requestNotifications,
             onReshowNotification = vm::reshowNotification,
             onManageActivities = onManageActivities,
             onOpenHistory = onOpenHistory,
         )
+        backdating?.let { activity ->
+            BackdateDialog(
+                activity = activity,
+                now = s.now,
+                zone = s.zone,
+                loadLimit = vm::backdateLimit,
+                onPick = { at ->
+                    backdating = null
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    vm.startAt(activity.id, at)
+                },
+                onDismiss = { backdating = null },
+            )
+        }
         s.forgotten?.let { prompt ->
             ForgottenSessionDialog(
                 prompt = prompt,
@@ -146,6 +190,8 @@ private fun TodayContent(
     canNotify: Boolean,
     onTap: (String) -> Unit,
     onStop: () -> Unit,
+    onLongPress: (TrackedActivity) -> Unit,
+    onResume: (String) -> Unit,
     onRequestNotifications: () -> Unit,
     onReshowNotification: () -> Unit,
     onManageActivities: () -> Unit,
@@ -194,8 +240,8 @@ private fun TodayContent(
                 )
             }
         }
-        item { Hero(s, onStop) }
-        item { SectionHeader("Activités") }
+        item { Hero(s, onStop, onResume) }
+        item { SectionHeader("Activités", hint = "Appui long : démarrer plus tôt") }
         if (s.shortcuts.isEmpty()) {
             item {
                 InfoBanner(text = "Toutes les activités sont archivées.", action = "Gérer", onAction = onManageActivities)
@@ -211,6 +257,7 @@ private fun TodayContent(
                         activity = a,
                         isActive = s.active?.activityId == a.id,
                         onClick = { onTap(a.id) },
+                        onLongClick = { onLongPress(a) },
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }
@@ -221,6 +268,10 @@ private fun TodayContent(
             SectionHeader("Aujourd'hui", trailing = if (s.report.isEmpty) null else Fmt.short(s.report.tracked))
         }
         item { DaySummary(s.report, s.activitiesById) }
+        if (s.dailyGoals.isNotEmpty()) {
+            item { SectionHeader("Objectifs du jour") }
+            items(s.dailyGoals, key = { "goal-" + it.activity.id }) { GoalRow(it) }
+        }
     }
 }
 
@@ -228,8 +279,9 @@ private fun TodayContent(
  * Zone principale : activité en cours et chronomètre. La hauteur est la même avec ou sans
  * activité, pour que les raccourcis ne se déplacent jamais sous le doigt.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Hero(s: TodayUiState, onStop: () -> Unit) {
+private fun Hero(s: TodayUiState, onStop: () -> Unit, onResume: (String) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val active = s.active
     val timerStyle = MaterialTheme.typography.displayLarge.tabular().copy(textAlign = TextAlign.Center, fontWeight = FontWeight.Light)
@@ -279,7 +331,19 @@ private fun Hero(s: TodayUiState, onStop: () -> Unit) {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
             }
             Spacer(Modifier.height(20.dp))
-            PillButton("Arrêter le suivi", onClick = onStop, primary = false, leading = { StopGlyph() })
+            val resume = s.resume
+            if (resume != null) {
+                // Pendant une interruption : reprendre l'activité précédente en un appui.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    PillButton("Reprendre ${resume.name}", onClick = { onResume(resume.id) }, primary = true)
+                    PillButton("Arrêter", onClick = onStop, primary = false, leading = { StopGlyph() })
+                }
+            } else {
+                PillButton("Arrêter le suivi", onClick = onStop, primary = false, leading = { StopGlyph() })
+            }
         }
     }
 }
@@ -303,6 +367,81 @@ private fun DaySummary(report: PeriodReport, activities: Map<String, TrackedActi
         Spacer(Modifier.height(4.dp))
         Text("Pourcentages calculés sur le temps suivi.", style = MaterialTheme.typography.labelSmall, color = muted)
     }
+}
+
+/**
+ * « Démarrer plus tôt » : quelques durées rapides et une heure précise. Seules les heures autorisées
+ * sont proposées (après le début de la session en cours, ou après la fin de la dernière session).
+ */
+@Composable
+private fun BackdateDialog(
+    activity: TrackedActivity,
+    now: Instant,
+    zone: ZoneId,
+    loadLimit: suspend () -> BackdateLimit,
+    onPick: (Instant) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val limit by produceState<BackdateLimit?>(initialValue = null, activity.id) { value = loadLimit() }
+    val reference = remember(activity.id) { now.truncatedTo(ChronoUnit.MINUTES) }
+    var custom by remember(activity.id) { mutableStateOf(false) }
+    var value by remember(activity.id) {
+        mutableStateOf<LocalDateTime>(reference.minusSeconds(15 * 60).atZone(zone).toLocalDateTime())
+    }
+    val options = listOf(5, 10, 15, 30, 60)
+        .map { it to reference.minusSeconds(it * 60L) }
+        .filter { (_, at) -> limit?.allows(at) ?: true }
+    val customInstant = ZonedDateTime.of(value, zone).toInstant()
+    val customValid = !customInstant.isAfter(now) && (limit?.allows(customInstant) ?: true)
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Démarrer « ${activity.name} » plus tôt") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (!custom) {
+                    options.forEach { (minutes, at) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onPick(at) }
+                                .padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(if (minutes == 60) "Il y a 1 h" else "Il y a $minutes min", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Text(Fmt.time(at, zone), style = MaterialTheme.typography.bodyMedium.tabular(), color = muted)
+                        }
+                    }
+                    if (options.isEmpty() && limit != null) {
+                        Text("Aucune de ces durées n'est possible : choisissez une heure.", color = muted)
+                    }
+                    TextButton(onClick = { custom = true }) { Text("Choisir une heure…") }
+                } else {
+                    DateTimeField("Début", value, { value = it })
+                    if (!customValid) {
+                        Text("Heure impossible : elle chevaucherait une autre session ou serait dans le futur.", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                limit?.instant?.let {
+                    val day = it.atZone(zone).toLocalDate()
+                    val label = if (day == now.atZone(zone).toLocalDate()) Fmt.time(it, zone) else Fmt.startLabel(it, now.atZone(zone).toLocalDate(), zone)
+                    Text(
+                        if (limit?.exclusive == true) "Au plus tôt : après $label (début de la session en cours)."
+                        else "Au plus tôt : $label (fin de la dernière session).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = muted,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (custom) TextButton(onClick = { onPick(customInstant) }, enabled = customValid) { Text("Démarrer") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
 }
 
 @Composable

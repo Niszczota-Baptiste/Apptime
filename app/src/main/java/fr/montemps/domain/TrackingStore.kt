@@ -17,8 +17,8 @@ interface TrackingStore {
     suspend fun sessionsOverlapping(from: Instant, to: Instant): List<Session>
     /** Fin la plus tardive parmi les sessions terminées. */
     suspend fun latestEnd(): Instant?
-    /** Dernière session terminée (pour proposer de « reprendre » son activité). */
-    suspend fun lastEndedSession(): Session?
+    /** Dernières sessions terminées, de la plus récente à la plus ancienne (règle de reprise). */
+    suspend fun recentEndedSessions(limit: Int): List<Session>
     suspend fun insertSession(session: Session): Long
     suspend fun updateSession(session: Session)
     suspend fun deleteSession(id: Long)

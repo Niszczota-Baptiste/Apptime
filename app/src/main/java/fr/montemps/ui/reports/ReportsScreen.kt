@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -36,7 +37,10 @@ import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.report.PeriodReport
 import fr.montemps.domain.report.WeekReport
 import fr.montemps.ui.ScreenScaffold
+import fr.montemps.ui.components.ActivityMarker
 import fr.montemps.ui.components.DistributionBar
+import fr.montemps.ui.components.GoalRow
+import fr.montemps.ui.components.signedShort
 import fr.montemps.ui.components.PageHeader
 import fr.montemps.ui.components.SectionHeader
 import fr.montemps.ui.components.SegmentedToggle
@@ -108,6 +112,19 @@ fun ReportsScreen(vm: ReportsViewModel) {
                 if (report.includesActiveSession) {
                     Text("Session en cours incluse.", style = MaterialTheme.typography.bodySmall, color = muted)
                 }
+                s.comparison?.let { cmp ->
+                    if (!cmp.previous.isZero || !cmp.current.isZero) {
+                        Text(
+                            "${signedShort(cmp.delta)} par rapport à la semaine précédente" + if (s.includesToday) " (au même moment)" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = muted,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+                s.dailyAverage?.takeIf { !it.isZero }?.let {
+                    Text("Moyenne : ${Fmt.short(it)} par jour écoulé", style = MaterialTheme.typography.bodySmall, color = muted)
+                }
             }
 
             if (report.isEmpty) {
@@ -126,6 +143,61 @@ fun ReportsScreen(vm: ReportsViewModel) {
                     val a = s.activities[t.activityId]
                     ShareRow(a, a?.name ?: t.activityId, t.duration, t.shareOfTracked)
                 }
+            }
+            if (s.goals.isNotEmpty() || s.dailyGoalsWeek.isNotEmpty()) {
+                SectionHeader(if (s.mode == ReportMode.DAY) "Objectifs du jour" else "Objectifs")
+                s.goals.forEach { GoalRow(it) }
+                s.dailyGoalsWeek.forEach { g ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 8.dp).semantics(mergeDescendants = true) { },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ActivityMarker(g.activity)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            "${g.activity.name} · ${Fmt.short(g.goal.target)} par jour",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "${g.reachedDays} j / ${g.countedDays}",
+                            style = MaterialTheme.typography.bodyMedium.tabular(),
+                            color = if (g.countedDays > 0 && g.reachedDays == g.countedDays) MaterialTheme.colorScheme.onSurface else muted,
+                        )
+                    }
+                }
+            }
+            s.comparison?.byActivity?.takeIf { it.isNotEmpty() }?.let { deltas ->
+                SectionHeader("Évolution", trailing = "vs semaine précédente")
+                deltas.take(3).forEach { d ->
+                    val a = s.activities[d.activityId]
+                    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ActivityMarker(a)
+                        Spacer(Modifier.width(12.dp))
+                        Text(a?.name ?: d.activityId, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Text(signedShort(d.delta), style = MaterialTheme.typography.bodyMedium.tabular(), color = muted)
+                    }
+                }
+            }
+            if (s.includesToday && s.streaks.isNotEmpty()) {
+                SectionHeader("Séries en cours")
+                s.streaks.take(5).forEach { st ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ActivityMarker(st.activity)
+                        Spacer(Modifier.width(12.dp))
+                        Text(st.activity.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Text(
+                            "${st.days} jours" + if (st.includesToday) "" else " (jusqu'à hier)",
+                            style = MaterialTheme.typography.bodyMedium.tabular(),
+                            color = muted,
+                        )
+                    }
+                }
+                Text(
+                    "Jours consécutifs suivis (objectif quotidien atteint, s'il existe).",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = muted,
+                )
             }
             s.week?.let { WeekDays(it, s) }
             Text(

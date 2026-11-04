@@ -1,6 +1,7 @@
 package fr.montemps.surfaces
 
 import fr.montemps.data.prefs.PreferencesRepository
+import fr.montemps.domain.ResumeRule
 import fr.montemps.domain.TrackingStore
 import fr.montemps.domain.model.Session
 import fr.montemps.domain.model.TrackedActivity
@@ -24,8 +25,10 @@ data class SurfaceState(
     val shortcuts: List<TrackedActivity>,
     /** Favorites non archivées, sauf l'activité en cours (elle n'aurait aucun effet). */
     val favorites: List<TrackedActivity>,
-    /** Activité de la dernière session terminée (pour « Reprendre »), si elle n'est pas archivée. */
+    /** Dernière activité « de travail » (ni archivée ni interruption), pour reprendre depuis l'inactivité. */
     val lastActivity: TrackedActivity?,
+    /** Pendant une interruption : l'activité à reprendre en un appui. */
+    val resumeActivity: TrackedActivity? = null,
     /** Temps suivi aujourd'hui, session en cours comprise jusqu'à [now]. */
     val trackedToday: Duration,
     /** « 09:15 », « hier 23:10 »… ; null sans session en cours. */
@@ -46,6 +49,7 @@ class SurfaceStateLoader(
         val byId = activities.associateBy { it.id }
         val active = store.activeSession()
         val (from, to) = ReportCalculator.dayBounds(today, zone)
+        val recent = store.recentEndedSessions(ResumeRule.LOOKBACK)
         return SurfaceState(
             now = now,
             zone = zone,
@@ -53,7 +57,8 @@ class SurfaceStateLoader(
             activeActivity = active?.let { byId[it.activityId] },
             shortcuts = activities.filter { !it.archived }.sortedBy { it.sortOrder },
             favorites = p.favoriteIds.filter { it != active?.activityId }.mapNotNull { byId[it] }.filter { !it.archived },
-            lastActivity = store.lastEndedSession()?.let { byId[it.activityId] }?.takeIf { !it.archived },
+            lastActivity = ResumeRule.lastWorkActivity(recent, byId, exclude = null),
+            resumeActivity = ResumeRule.resumeTarget(active, byId, recent),
             trackedToday = ReportCalculator.report(store.sessionsOverlapping(from, to), from, to, now).tracked,
             startLabel = active?.let { Fmt.startLabel(it.start, today, zone) },
         )

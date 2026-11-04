@@ -1,6 +1,10 @@
 package fr.montemps.data.backup
 
+import fr.montemps.data.prefs.AppPreferences
 import fr.montemps.domain.SessionValidator
+import fr.montemps.domain.model.DefaultActivities
+import fr.montemps.domain.model.Goal
+import fr.montemps.domain.model.GoalPeriod
 import fr.montemps.domain.model.Session
 import fr.montemps.domain.model.TrackedActivity
 import kotlinx.serialization.SerialName
@@ -15,8 +19,12 @@ import java.time.ZoneId
  * Les instants sont en ISO-8601 UTC (« 2026-11-04T08:15:00Z »). `formatVersion` est incrémenté
  * à chaque changement de format ; la lecture accepte les versions 1 à [BackupCodec.CURRENT_VERSION].
  *
- * Historique : v1 = version initiale ; v2 = ajout de `preferences.longSessionReminder`
- * (absent d'un fichier v1 : valeur par défaut `true`).
+ * Historique :
+ * - v1 : version initiale ;
+ * - v2 : `preferences.longSessionReminder` (défaut `true`) ;
+ * - v3 : `activities[].interruption`, `goalMinutes`, `goalPeriod` ; préférences du résumé du soir,
+ *   du rappel d'inactivité et de l'affichage « Live Update ». Absents d'un fichier plus ancien :
+ *   valeurs par défaut (Pause et Repas sont alors des interruptions, aucun objectif).
  */
 @Serializable
 data class BackupFile(
@@ -38,6 +46,10 @@ data class BackupActivity(
     val icon: String? = null,
     val sortOrder: Int,
     val archived: Boolean = false,
+    val interruption: Boolean? = null,
+    val goalMinutes: Int? = null,
+    /** « day » ou « week ». */
+    val goalPeriod: String? = null,
 )
 
 @Serializable
@@ -60,7 +72,46 @@ data class BackupPreferences(
     val hideNameOnLockScreen: Boolean = false,
     val forgottenThresholdHours: Int = 10,
     val longSessionReminder: Boolean = true,
-)
+    val promotedNotification: Boolean = true,
+    val idleReminderEnabled: Boolean = false,
+    val idleReminderHours: Int = 2,
+    val idleWindowStartMinutes: Int = 8 * 60,
+    val idleWindowEndMinutes: Int = 22 * 60,
+    val eveningSummaryEnabled: Boolean = false,
+    val eveningSummaryMinutes: Int = 21 * 60,
+) {
+    fun toAppPreferences(): AppPreferences = AppPreferences(
+        favoriteIds = favoriteIds,
+        notificationEnabled = notificationEnabled,
+        hideNameOnLockScreen = hideNameOnLockScreen,
+        promotedNotification = promotedNotification,
+        forgottenThresholdHours = forgottenThresholdHours,
+        longSessionReminder = longSessionReminder,
+        idleReminderEnabled = idleReminderEnabled,
+        idleReminderHours = idleReminderHours,
+        idleWindowStartMinutes = idleWindowStartMinutes,
+        idleWindowEndMinutes = idleWindowEndMinutes,
+        eveningSummaryEnabled = eveningSummaryEnabled,
+        eveningSummaryMinutes = eveningSummaryMinutes,
+    )
+
+    companion object {
+        fun of(p: AppPreferences) = BackupPreferences(
+            favoriteIds = p.favoriteIds,
+            notificationEnabled = p.notificationEnabled,
+            hideNameOnLockScreen = p.hideNameOnLockScreen,
+            forgottenThresholdHours = p.forgottenThresholdHours,
+            longSessionReminder = p.longSessionReminder,
+            promotedNotification = p.promotedNotification,
+            idleReminderEnabled = p.idleReminderEnabled,
+            idleReminderHours = p.idleReminderHours,
+            idleWindowStartMinutes = p.idleWindowStartMinutes,
+            idleWindowEndMinutes = p.idleWindowEndMinutes,
+            eveningSummaryEnabled = p.eveningSummaryEnabled,
+            eveningSummaryMinutes = p.eveningSummaryMinutes,
+        )
+    }
+}
 
 /** Contenu validé d'une sauvegarde, prêt à être écrit. */
 data class BackupSnapshot(
@@ -76,7 +127,7 @@ sealed interface DecodeResult {
 
 object BackupCodec {
     const val FORMAT_ID = "mon-temps-backup"
-    const val CURRENT_VERSION = 2
+    const val CURRENT_VERSION = 3
 
     private val json = Json {
         prettyPrint = true
@@ -89,7 +140,17 @@ object BackupCodec {
             exportedAt = exportedAt.toString(),
             appVersion = appVersion,
             activities = snapshot.activities.map {
-                BackupActivity(it.id, it.name, colorToHex(it.color), it.icon, it.sortOrder, it.archived)
+                BackupActivity(
+                    id = it.id,
+                    name = it.name,
+                    color = colorToHex(it.color),
+                    icon = it.icon,
+                    sortOrder = it.sortOrder,
+                    archived = it.archived,
+                    interruption = it.interruption,
+                    goalMinutes = it.goal?.minutes,
+                    goalPeriod = it.goal?.period?.id,
+                )
             },
             sessions = snapshot.sessions.sortedBy { it.start }.map {
                 BackupSession(
@@ -128,7 +189,22 @@ object BackupCodec {
             if (!ids.add(a.id)) return DecodeResult.Invalid("Identifiant d'activité en double : ${a.id}.")
             if (a.name.isBlank()) return DecodeResult.Invalid("L'activité ${a.id} n'a pas de nom.")
             val color = parseColor(a.color) ?: return DecodeResult.Invalid("Couleur invalide pour « ${a.name} ».")
-            activities += TrackedActivity(a.id, a.name.trim(), color, a.icon, a.sortOrder, a.archived)
+            val goal = when {
+                a.goalMinutes == null && a.goalPeriod == null -> null
+                a.goalMinutes == null || a.goalMinutes <= 0 || GoalPeriod.of(a.goalPeriod) == null ->
+                    return DecodeResult.Invalid("Objectif invalide pour « ${a.name} ».")
+                else -> Goal(a.goalMinutes, GoalPeriod.of(a.goalPeriod)!!)
+            }
+            activities += TrackedActivity(
+                id = a.id,
+                name = a.name.trim(),
+                color = color,
+                icon = a.icon,
+                sortOrder = a.sortOrder,
+                archived = a.archived,
+                interruption = a.interruption ?: (a.id in DefaultActivities.interruptionIds),
+                goal = goal,
+            )
         }
 
         val sessions = mutableListOf<Session>()
@@ -157,9 +233,15 @@ object BackupCodec {
         SessionValidator.findInconsistency(sessions)?.let { return DecodeResult.Invalid(it) }
 
         val prefs = (file.preferences ?: BackupPreferences()).let { p ->
+            val windowValid = p.idleWindowStartMinutes in 0..1439 && p.idleWindowEndMinutes in 1..1440 &&
+                p.idleWindowStartMinutes < p.idleWindowEndMinutes
             p.copy(
                 favoriteIds = p.favoriteIds.filter { it in ids }.distinct().take(2),
                 forgottenThresholdHours = p.forgottenThresholdHours.coerceIn(1, 72),
+                idleReminderHours = p.idleReminderHours.coerceIn(1, 12),
+                idleWindowStartMinutes = if (windowValid) p.idleWindowStartMinutes else 8 * 60,
+                idleWindowEndMinutes = if (windowValid) p.idleWindowEndMinutes else 22 * 60,
+                eveningSummaryMinutes = p.eveningSummaryMinutes.coerceIn(0, 1439),
             )
         }
         return DecodeResult.Valid(BackupSnapshot(activities, sessions, prefs), file.exportedAt)

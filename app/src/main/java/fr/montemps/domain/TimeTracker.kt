@@ -5,6 +5,7 @@ import fr.montemps.domain.model.Session
 import fr.montemps.domain.time.TimeSource
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.time.Duration
 import java.time.Instant
 
 /**
@@ -33,8 +34,34 @@ sealed interface TransitionResult {
         CLOCK_BEFORE_LAST_RECORD,
         INVALID_END_TIME,
         NOT_ACTIVE,
+        /** Démarrage rétroactif avant la session en cours ou avant la fin de la précédente. */
+        START_TOO_EARLY,
+        START_IN_FUTURE,
     }
 }
+
+/** Jeton d'annulation d'une transition récente (voir [TimeTracker.undo]). */
+data class UndoToken(val startedSessionId: Long?, val endedSessionId: Long?, val endedAt: Instant?)
+
+fun TransitionResult.undoToken(): UndoToken? = when (this) {
+    is TransitionResult.Started -> UndoToken(session.id, previous?.id, previous?.end)
+    is TransitionResult.Stopped -> UndoToken(null, session.id, session.end)
+    else -> null
+}
+
+/**
+ * Limite basse d'un démarrage rétroactif : début de la session en cours (exclu), sinon fin de la
+ * dernière session (incluse) ; null si aucune session.
+ */
+data class BackdateLimit(val instant: Instant?, val exclusive: Boolean) {
+    fun allows(at: Instant): Boolean = when {
+        instant == null -> true
+        exclusive -> at.isAfter(instant)
+        else -> !at.isBefore(instant)
+    }
+}
+
+private val FAR_FUTURE: Instant = Instant.parse("9999-12-31T00:00:00Z")
 
 /**
  * Verrou partagé par toutes les opérations d'écriture (transitions, corrections, activités,
@@ -64,7 +91,56 @@ class TimeTracker(
 
     override suspend fun currentSession(): Session? = store.activeSession()
 
-    override suspend fun switchTo(activityId: String, source: CommandSource): TransitionResult {
+    override suspend fun switchTo(activityId: String, source: CommandSource): TransitionResult =
+        transition(activityId, at = null, source = source)
+
+    /**
+     * Démarre [activityId] à l'instant passé [at] (« j'ai commencé il y a 10 min »). L'activité en
+     * cours éventuelle se termine à [at]. Refusé si [at] est futur, antérieur au début de la session
+     * en cours ou à la fin de la dernière session : jamais de chevauchement.
+     */
+    suspend fun switchToAt(activityId: String, at: Instant, source: CommandSource = CommandSource.App): TransitionResult =
+        transition(activityId, at = at, source = source)
+
+    /** Limite basse d'un démarrage rétroactif (voir [BackdateLimit]). */
+    suspend fun backdateLimit(): BackdateLimit {
+        val active = store.activeSession()
+        return if (active != null) BackdateLimit(active.start, exclusive = true) else BackdateLimit(store.latestEnd(), exclusive = false)
+    }
+
+    /**
+     * Annule une transition récente (appui accidentel) : supprime la session démarrée et rouvre la
+     * session terminée. Refusé (false) si quoi que ce soit a changé depuis : autre transition,
+     * correction, session ajoutée…
+     */
+    suspend fun undo(token: UndoToken): Boolean {
+        val done = lock.withLock {
+            store.transaction {
+                val active = store.activeSession()
+                val started = token.startedSessionId?.let { store.session(it) }
+                val ended = token.endedSessionId?.let { store.session(it) }
+                val activeMatches = if (token.startedSessionId != null) {
+                    started != null && active?.id == token.startedSessionId
+                } else {
+                    active == null
+                }
+                val endedMatches = token.endedSessionId == null || (ended != null && ended.end == token.endedAt)
+                if (!activeMatches || !endedMatches || (started == null && ended == null)) return@transaction false
+                // Rien d'autre ne doit exister après le début de la session à rouvrir.
+                val from = ended?.start ?: started!!.start
+                val others = store.sessionsOverlapping(from, FAR_FUTURE)
+                    .filter { it.id != token.startedSessionId && it.id != token.endedSessionId }
+                if (others.isNotEmpty()) return@transaction false
+                started?.let { store.deleteSession(it.id) }
+                ended?.let { store.updateSession(it.copy(end = null)) }
+                true
+            }
+        }
+        if (done) listener.onDataChanged()
+        return done
+    }
+
+    private suspend fun transition(activityId: String, at: Instant?, source: CommandSource): TransitionResult {
         val result = lock.withLock {
             store.transaction {
                 val active = store.activeSession()
@@ -75,17 +151,25 @@ class TimeTracker(
                 if (activity.archived) return@transaction TransitionResult.Rejected(TransitionResult.Reason.ARCHIVED_ACTIVITY)
 
                 val now = time.now()
-                if (!isAfterLastRecord(now, active)) {
-                    return@transaction TransitionResult.Rejected(TransitionResult.Reason.CLOCK_BEFORE_LAST_RECORD)
+                val start = at ?: now
+                if (at == null) {
+                    if (!isAfterLastRecord(now, active)) {
+                        return@transaction TransitionResult.Rejected(TransitionResult.Reason.CLOCK_BEFORE_LAST_RECORD)
+                    }
+                } else {
+                    if (at.isAfter(now)) return@transaction TransitionResult.Rejected(TransitionResult.Reason.START_IN_FUTURE)
+                    val limit = if (active != null) BackdateLimit(active.start, true) else BackdateLimit(store.latestEnd(), false)
+                    if (!limit.allows(at)) return@transaction TransitionResult.Rejected(TransitionResult.Reason.START_TOO_EARLY)
                 }
 
-                val ended = active?.copy(end = now)?.also { store.updateSession(it) }
+                val ended = active?.copy(end = start)?.also { store.updateSession(it) }
                 val newSession = Session(
                     activityId = activityId,
-                    start = now,
+                    start = start,
                     end = null,
                     zoneId = time.zone().id,
-                    startElapsedRealtimeMs = time.elapsedRealtimeMs(),
+                    // Horloge monotone ramenée au début réel (démarrage rétroactif).
+                    startElapsedRealtimeMs = time.elapsedRealtimeMs() - Duration.between(start, now).toMillis(),
                     startBootCount = time.bootCount(),
                     source = source.id,
                 )

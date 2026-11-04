@@ -37,6 +37,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -67,6 +68,7 @@ import fr.montemps.ui.settings.SettingsScreen
 import fr.montemps.ui.settings.SettingsViewModel
 import fr.montemps.ui.today.TodayScreen
 import fr.montemps.ui.today.TodayViewModel
+import java.time.Instant
 import java.time.LocalDate
 
 private enum class TopLevel(val route: String, val label: String, val icon: () -> ImageVector) {
@@ -80,8 +82,21 @@ private enum class TopLevel(val route: String, val label: String, val icon: () -
 private val LocalHasBottomBar = compositionLocalOf { false }
 
 @Composable
-fun MonTempsNavHost(startRoute: String = TopLevel.TODAY.route) {
+fun MonTempsNavHost(
+    startRoute: String = TopLevel.TODAY.route,
+    destination: String? = null,
+    onDestinationHandled: () -> Unit = {},
+) {
     val nav = rememberNavController()
+    LaunchedEffect(destination) {
+        val target = TopLevel.entries.firstOrNull { it.route == destination } ?: return@LaunchedEffect
+        nav.navigate(target.route) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+        onDestinationHandled()
+    }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val showBottomBar = TopLevel.entries.any { it.route == route } || route == null
@@ -114,6 +129,9 @@ fun MonTempsNavHost(startRoute: String = TopLevel.TODAY.route) {
                         containerViewModel { HistoryViewModel(it) },
                         onEdit = { id -> nav.navigate("session/$id") },
                         onAdd = { date -> nav.navigate("session/new/${date.toEpochDay()}") },
+                        onFillGap = { date, start, end ->
+                            nav.navigate("session/new/${date.toEpochDay()}?start=${start.toEpochMilli()}&end=${end.toEpochMilli()}")
+                        },
                     )
                 }
                 composable(TopLevel.REPORTS.route) { ReportsScreen(containerViewModel { ReportsViewModel(it) }) }
@@ -127,9 +145,23 @@ fun MonTempsNavHost(startRoute: String = TopLevel.TODAY.route) {
                     val id = e.arguments!!.getLong("id")
                     SessionEditScreen(containerViewModel("edit-$id") { SessionEditViewModel(it, id, null) }, onDone = { nav.popBackStack() })
                 }
-                composable("session/new/{day}", arguments = listOf(navArgument("day") { type = NavType.LongType })) { e ->
-                    val day = LocalDate.ofEpochDay(e.arguments!!.getLong("day"))
-                    SessionEditScreen(containerViewModel("new-$day") { SessionEditViewModel(it, null, day) }, onDone = { nav.popBackStack() })
+                composable(
+                    "session/new/{day}?start={start}&end={end}",
+                    arguments = listOf(
+                        navArgument("day") { type = NavType.LongType },
+                        navArgument("start") { type = NavType.LongType; defaultValue = -1L },
+                        navArgument("end") { type = NavType.LongType; defaultValue = -1L },
+                    ),
+                ) { e ->
+                    val args = e.arguments!!
+                    val day = LocalDate.ofEpochDay(args.getLong("day"))
+                    val start = args.getLong("start")
+                    val end = args.getLong("end")
+                    val prefill = if (start > 0 && end > start) Instant.ofEpochMilli(start) to Instant.ofEpochMilli(end) else null
+                    SessionEditScreen(
+                        containerViewModel("new-$day-$start-$end") { SessionEditViewModel(it, null, day, prefill) },
+                        onDone = { nav.popBackStack() },
+                    )
                 }
             }
         }

@@ -81,9 +81,16 @@ object WidgetRenderer {
             views.setViewVisibility(R.id.widget_info, if (size.showsInfo && hasToday) View.VISIBLE else View.GONE)
         }
         views.removeAllViews(R.id.widget_favorites)
-        val favorites = state.favorites.take(2)
+        // Pendant une interruption : « Reprendre Travail » d'abord, puis les favorites.
+        val resume = state.resumeActivity
+        val favorites = (listOfNotNull(resume) + state.favorites.filter { it.id != resume?.id }).take(2)
         if (size.showsFavorites && favorites.isNotEmpty()) {
-            favorites.forEach { views.addView(R.id.widget_favorites, button(context, it, isActive = false)) }
+            favorites.forEach {
+                views.addView(
+                    R.id.widget_favorites,
+                    button(context, it, isActive = false, label = if (it.id == resume?.id) "Reprendre ${it.name}" else it.name),
+                )
+            }
             views.setViewVisibility(R.id.widget_favorites, View.VISIBLE)
         } else {
             views.setViewVisibility(R.id.widget_favorites, View.GONE)
@@ -115,10 +122,10 @@ object WidgetRenderer {
     }
 
     /** Bouton « pastille + nom ». L'activité en cours est en négatif (fond encre), comme dans l'app. */
-    private fun button(context: Context, activity: TrackedActivity, isActive: Boolean): RemoteViews {
+    private fun button(context: Context, activity: TrackedActivity, isActive: Boolean, label: String = activity.name): RemoteViews {
         val layout = if (isActive) R.layout.widget_activity_button_active else R.layout.widget_activity_button
         return RemoteViews(context.packageName, layout).apply {
-            setTextViewText(R.id.widget_button_label, activity.name)
+            setTextViewText(R.id.widget_button_label, label)
             setInt(R.id.widget_button_dot, "setColorFilter", activity.color)
             setOnClickPendingIntent(R.id.widget_button, TrackingIntents.switchTo(context, activity.id, CommandSource.Widget))
             setContentDescription(R.id.widget_button, if (isActive) "${activity.name}, en cours" else "Démarrer ${activity.name}")

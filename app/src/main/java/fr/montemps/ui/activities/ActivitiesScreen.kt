@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,9 +49,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,6 +61,12 @@ import androidx.lifecycle.viewModelScope
 import fr.montemps.AppContainer
 import fr.montemps.domain.CatalogResult
 import fr.montemps.domain.model.DefaultActivities
+import fr.montemps.domain.model.Goal
+import fr.montemps.domain.model.GoalPeriod
+import fr.montemps.domain.report.Fmt
+import fr.montemps.ui.components.SegmentedToggle
+import fr.montemps.ui.components.tabular
+import java.time.Duration
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.ui.ScreenScaffold
 import fr.montemps.ui.components.ActivityMarker
@@ -80,8 +90,13 @@ class ActivitiesViewModel(private val c: AppContainer) : ViewModel() {
         }
     }
 
-    fun save(id: String?, name: String, color: Int, icon: String?, onOk: () -> Unit) =
-        run({ if (id == null) c.catalog.create(name, color, icon) else c.catalog.edit(id, name, color, icon) }, onOk)
+    fun save(id: String?, values: ActivityValues, onOk: () -> Unit) = run({
+        if (id == null) {
+            c.catalog.create(values.name, values.color, values.icon, values.interruption, values.goal)
+        } else {
+            c.catalog.edit(id, values.name, values.color, values.icon, values.interruption, values.goal)
+        }
+    }, onOk)
 
     fun move(id: String, delta: Int) = run({ c.catalog.move(id, delta) })
     fun setArchived(id: String, archived: Boolean) = run({ c.catalog.setArchived(id, archived) }) {
@@ -90,6 +105,15 @@ class ActivitiesViewModel(private val c: AppContainer) : ViewModel() {
 }
 
 private data class EditTarget(val activity: TrackedActivity?)
+
+/** Valeurs saisies dans la boîte d'édition d'une activité. */
+data class ActivityValues(
+    val name: String,
+    val color: Int,
+    val icon: String?,
+    val interruption: Boolean,
+    val goal: Goal?,
+)
 
 @Composable
 fun ActivitiesScreen(vm: ActivitiesViewModel, onBack: () -> Unit) {
@@ -159,7 +183,7 @@ fun ActivitiesScreen(vm: ActivitiesViewModel, onBack: () -> Unit) {
         ActivityEditDialog(
             initial = target.activity,
             onDismiss = { editing = null },
-            onSave = { name, color, icon -> vm.save(target.activity?.id, name, color, icon) { editing = null } },
+            onSave = { values -> vm.save(target.activity?.id, values) { editing = null } },
             onArchive = target.activity?.takeIf { !it.archived }?.let { a -> { vm.setArchived(a.id, true); editing = null } },
         )
     }
@@ -193,11 +217,14 @@ private fun ActivityRow(a: TrackedActivity, onClick: () -> Unit, trailing: @Comp
 private fun ActivityEditDialog(
     initial: TrackedActivity?,
     onDismiss: () -> Unit,
-    onSave: (String, Int, String?) -> Unit,
+    onSave: (ActivityValues) -> Unit,
     onArchive: (() -> Unit)?,
 ) {
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     var color by remember { mutableStateOf(initial?.color ?: DefaultActivities.palette.first()) }
+    var interruption by remember { mutableStateOf(initial?.interruption ?: false) }
+    var goalPeriod by remember { mutableStateOf(initial?.goal?.period) }
+    var goalMinutes by remember { mutableStateOf(initial?.goal?.minutes ?: 30) }
     val scheme = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -237,12 +264,69 @@ private fun ActivityEditDialog(
                         }
                     }
                 }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = interruption, role = Role.Switch, onValueChange = { interruption = it })
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Interruption", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Pause, repas… : propose ensuite de reprendre l'activité précédente.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = interruption, onCheckedChange = null)
+                }
+                FieldLabel("Objectif")
+                SegmentedToggle(
+                    options = listOf(null, GoalPeriod.DAY, GoalPeriod.WEEK),
+                    selected = goalPeriod,
+                    label = {
+                        when (it) {
+                            null -> "Aucun"
+                            GoalPeriod.DAY -> "Par jour"
+                            GoalPeriod.WEEK -> "Par semaine"
+                        }
+                    },
+                    onSelect = { p ->
+                        if (p == GoalPeriod.WEEK && goalPeriod != GoalPeriod.WEEK) goalMinutes = 180
+                        if (p == GoalPeriod.DAY && goalPeriod != GoalPeriod.DAY) goalMinutes = 30
+                        goalPeriod = p
+                    },
+                )
+                goalPeriod?.let { period ->
+                    val step = if (period == GoalPeriod.DAY) 5 else 30
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { goalMinutes = (goalMinutes - step).coerceAtLeast(step) }) {
+                            Text("−", style = MaterialTheme.typography.titleLarge)
+                        }
+                        Text(
+                            Fmt.short(Duration.ofMinutes(goalMinutes.toLong())) + if (period == GoalPeriod.DAY) " par jour" else " par semaine",
+                            style = MaterialTheme.typography.bodyLarge.tabular(),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { goalMinutes = (goalMinutes + step).coerceAtMost(if (period == GoalPeriod.DAY) 1440 else 10080) }) {
+                            Text("+", style = MaterialTheme.typography.titleLarge)
+                        }
+                    }
+                }
                 if (onArchive != null) {
                     TextButton(onClick = onArchive) { Text("Archiver cette activité") }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name, color, initial?.icon) }, enabled = name.isNotBlank()) { Text("Enregistrer") } },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(ActivityValues(name, color, initial?.icon, interruption, goalPeriod?.let { Goal(goalMinutes, it) })) },
+                enabled = name.isNotBlank(),
+            ) { Text("Enregistrer") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }

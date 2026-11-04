@@ -27,7 +27,7 @@ notification : NotificationController → TrackingNotifier ; récepteurs → Tim
 
 | Table | Colonnes principales |
 |-------|----------------------|
-| `activities` | `id` (texte stable), `name`, `color` (ARGB), `icon` (émoji), `sort_order`, `archived` |
+| `activities` | `id` (texte stable), `name`, `color` (ARGB), `icon` (inutilisé), `sort_order`, `archived`, `interruption`, `goal_minutes`, `goal_period` (`day`/`week`) |
 | `sessions` | `id`, `activity_id` → activities (RESTRICT), `start_utc_ms`, `end_utc_ms` (NULL = en cours), `zone_id`, `note`, `start_elapsed_ms`, `start_boot_count`, `source` |
 
 - Intervalles **semi-ouverts** `[début, fin)` : une session peut commencer à l'instant exact où la
@@ -36,7 +36,9 @@ notification : NotificationController → TrackingNotifier ; récepteurs → Tim
   ≤ début, même si la logique applicative était contournée.
 - Identifiants d'activités par défaut : `work`, `driving`, `break`, `meal`, `korean`, `sport`,
   `writing`, `music`, `free_time`, `other`. Activités créées : UUID.
-- Schéma Room exporté dans `app/schemas/` (base des futures migrations).
+- Schéma Room exporté dans `app/schemas/` (base des migrations). **Version 2** : `interruption`,
+  `goal_minutes`, `goal_period` (migration `MIGRATION_1_2` : données conservées, Pause et Repas
+  deviennent des interruptions ; testée sur une base créée avec le schéma v1).
 
 ### Renommage d'une activité
 
@@ -61,6 +63,14 @@ raccourcis mais conserve ses sessions, visibles dans l'historique avec la mentio
 9. Chaque transition est atomique (transaction Room).
 10. Horloge reculée sous la dernière transition enregistrée : la transition est **refusée** avec
     un message (plutôt que créer un chevauchement ou inventer une heure).
+11. **Annuler** (`TimeTracker.undo`) : supprime la session démarrée et rouvre celle qui venait de
+    se terminer, dans une transaction. Refusé si quoi que ce soit a changé depuis (autre
+    transition, correction, session ajoutée après) : jamais d'état incohérent.
+12. **Démarrer plus tôt** (`TimeTracker.switchToAt`) : l'instant choisi doit être passé, strictement
+    après le début de la session en cours, ou au plus tôt à la fin de la dernière session. La session
+    en cours se termine à cet instant ; l'horloge monotone de départ est ramenée d'autant.
+13. **Reprendre** (`ResumeRule`) : pendant une activité marquée « interruption », l'app propose
+    l'activité de la dernière session terminée qui n'est ni archivée ni elle-même une interruption.
 
 ## Temps : instants, fuseaux, horloge monotone
 
@@ -115,7 +125,40 @@ et ne la republie pas pour cette session ; elle réapparaît au changement d'act
 - Autorisation refusée : le suivi fonctionne normalement dans l'app ; une carte propose
   d'autoriser (demande système une seule fois, puis renvoi vers les réglages).
 - PendingIntent explicites, immuables, vers un récepteur **non exporté**.
-- Pas de notification plein écran, pas de faux appel, pas de « Live Update » dans cette version.
+- Pas de notification plein écran ni de faux appel.
+- **Live Update (Android 16)** : la notification demande sa promotion (`setRequestPromotedOngoing`,
+  permission normale `POST_PROMOTED_NOTIFICATIONS`) ; elle remplit les critères documentés (en
+  cours, titre, pas de couleur de fond ni de vue personnalisée, style standard) et son chronomètre
+  natif s'affiche dans la puce de la barre d'état. Réglage pour la désactiver ; lien vers le réglage
+  système si l'utilisateur l'a refusée. HyperOS peut appliquer ses propres critères.
+- Pendant une interruption, première action « Reprendre … » (Android n'affiche que 3 actions :
+  Reprendre + 1 favorite + Arrêter).
+
+## Notifications programmées (facultatives)
+
+| Notification | Canal | Déclenchement | Une seule fois… |
+|--------------|-------|---------------|-----------------|
+| Session longue | Rappels | début + seuil (10 h) | par session |
+| « Rien n'est suivi » (désactivé par défaut) | Rappels | fin de la dernière session (ou début de plage, ou dernière ouverture de l'app) + délai, dans la plage horaire | par période d'inactivité |
+| Résumé du soir (désactivé par défaut) | Résumés (silencieux) | heure choisie, si quelque chose a été suivi | par jour |
+
+Toutes reposent sur des alarmes **inexactes** reprogrammées par `refreshOutputs()` (redémarrage
+compris) ; elles peuvent arriver quelques minutes en retard. Ouvrir l'app fait repartir la période
+d'inactivité (l'utilisateur voit déjà que rien n'est suivi). Démarrer une activité retire le rappel
+d'inactivité. Le résumé ouvre directement les bilans.
+
+## Bilans enrichis
+
+- **Trous** (`Gaps`) : périodes non suivies jusqu'à maintenant (jamais dans le futur) ; l'historique
+  affiche celles d'au moins 5 min et ouvre une saisie préremplie (début arrondi à la minute
+  supérieure, fin à la minute inférieure, pour rester dans la période libre).
+- **Objectifs** : par jour (progression du jour, et « n jours sur les jours écoulés » en vue
+  semaine) ou par semaine.
+- **Comparaison** : semaine affichée contre la semaine précédente **arrêtée au même moment local**
+  (pour une semaine en cours, comparer à une semaine complète serait trompeur).
+- **Moyenne** : temps suivi ÷ jours écoulés de la semaine.
+- **Séries** : jours consécutifs (jusqu'à aujourd'hui, ou hier si aujourd'hui n'est pas encore
+  atteint) où l'activité est suivie au moins 1 min, ou atteint son objectif quotidien s'il existe.
 
 ## Interface
 
@@ -171,14 +214,20 @@ et juste après minuit.
 
 - **CSV** : `;` + BOM UTF-8 (Excel/LibreOffice en français), heures locales et UTC, durée en
   secondes et hh:mm:ss, note échappée.
-- **JSON** : `format = "mon-temps-backup"`, `formatVersion = 2` (v2 ajoute
-  `preferences.longSessionReminder` ; les fichiers v1 restent lisibles), activités, sessions, préférences.
+- **JSON** : `format = "mon-temps-backup"`, `formatVersion = 3`, activités (dont interruption et
+  objectif), sessions, préférences. Les fichiers v1 et v2 restent lisibles (valeurs par défaut ;
+  Pause et Repas redeviennent des interruptions).
 - **Restauration** : décodage et validation complète *avant* toute écriture (format, version,
   identifiants, références, dates, fuseaux, chevauchements, au plus une session active, pas de
   futur), puis confirmation, puis remplacement dans **une seule transaction**. Un fichier invalide
   ne modifie rien.
 - Sélecteur de documents Android (SAF) : aucune permission de stockage. Sauvegarde cloud
   automatique Android désactivée (`allowBackup=false`) : l'utilisateur garde la maîtrise.
+- **Sauvegarde automatique** (facultative) : un dossier choisi une fois (`OpenDocumentTree`,
+  permission persistante limitée à ce dossier), une copie JSON complète tous les 7 jours
+  (`mon-temps-auto-AAAA-MM-JJ.json`), les 8 plus récentes conservées. En cas d'échec (dossier
+  supprimé, permission retirée), nouvel essai le lendemain et message dans les réglages. Le dossier
+  et l'état de la sauvegarde automatique sont propres à l'appareil (non inclus dans le JSON).
 
 ## Préparation des futures applications (Coréen, Sport, Création)
 

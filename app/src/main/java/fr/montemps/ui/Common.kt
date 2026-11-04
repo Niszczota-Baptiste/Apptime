@@ -56,6 +56,8 @@ fun TransitionResult.Reason.message(): String = when (this) {
         "L'heure du téléphone est antérieure à la dernière session enregistrée. Vérifiez l'heure système, puis réessayez."
     TransitionResult.Reason.INVALID_END_TIME -> "L'heure de fin doit être après le début et ne pas être dans le futur."
     TransitionResult.Reason.NOT_ACTIVE -> "Cette session n'est plus en cours."
+    TransitionResult.Reason.START_TOO_EARLY -> "Impossible de démarrer avant la fin de la session précédente."
+    TransitionResult.Reason.START_IN_FUTURE -> "L'heure de début ne peut pas être dans le futur."
 }
 
 fun SessionError.message(activities: Map<String, TrackedActivity>, zone: ZoneId): String = when (this) {

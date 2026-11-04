@@ -17,6 +17,12 @@
     <string name="reminder_action_continue">Continuer</string>
     <string name="reminder_action_fix">Corriger</string>
 
+    <string name="idle_title">Rien n\'est suivi depuis %1$s</string>
+    <string name="idle_text">Touchez une activité pour reprendre le suivi.</string>
+    <string name="summary_channel_name">Résumés</string>
+    <string name="summary_channel_description">Résumé du soir, sans son.</string>
+    <string name="summary_public_title">Résumé du jour</string>
+
     <string name="widget_tracking_label">Suivi en cours</string>
     <string name="widget_tracking_description">Activité en cours, chronomètre, arrêt et favorites.</string>
     <string name="widget_activities_label">Activités</string>

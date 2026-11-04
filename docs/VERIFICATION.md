@@ -1,4 +1,4 @@
-# Vérifications effectuées (version 0.1.0 : interface épurée, widgets, tuile, rappel)
+# Vérifications effectuées (version 0.1.0 : interface épurée, widgets, tuile, 10 améliorations d'usage)
 
 Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, Android SDK 36.
 **Aucun test sur appareil physique ni sur émulateur.** Les tests Android ont tourné sous Robolectric
@@ -8,11 +8,11 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 
 | Vérification | Commande | Résultat |
 |--------------|----------|----------|
-| Compilation debug | `./gradlew :app:assembleDebug` | OK : APK de 14,2 Mo, `fr.montemps.debug`, targetSdk 36 |
-| Compilation release (R8) | `./gradlew :app:assembleRelease` | OK : APK non signée de 1,97 Mo |
-| Tests unitaires + Robolectric | `./gradlew :app:testDebugUnitTest` | **67/67 réussis** (suite relancée 3 fois : stable) |
+| Compilation debug | `./gradlew :app:assembleDebug` | OK : APK de 14,3 Mo, `fr.montemps.debug`, targetSdk 36 |
+| Compilation release (R8) | `./gradlew :app:assembleRelease` | OK : APK non signée de 2,0 Mo |
+| Tests unitaires + Robolectric | `./gradlew :app:testDebugUnitTest` | **96/96 réussis** |
 | Android Lint | `./gradlew :app:lintDebug` | 0 erreur ; 1 avertissement (`localeConfig` ignoré sous API 33, sans effet) |
-| Permissions de l'APK | `aapt2 dump badging` | `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED` uniquement (+ permission interne générée par AndroidX) ; widgets, tuile et alarmes inexactes n'en ajoutent aucune |
+| Permissions de l'APK | `aapt2 dump badging` | `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `POST_PROMOTED_NOTIFICATIONS` (permission normale des Live Updates) + permission interne générée par AndroidX. Widgets, tuile, alarmes inexactes et dossier de sauvegarde (SAF) n'en ajoutent aucune |
 
 ## Couverture des tests
 
@@ -54,6 +54,18 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 | Actions de notification (répétées) via la logique commune | `NotificationTest.notificationActionsSwitchAndStopThroughSharedLogic` |
 | Masquage du nom sur l'écran verrouillé | `NotificationTest.hideNameOnLockScreenUsesPrivateVisibilityWithNeutralPublicVersion` |
 | Notification balayée non republiée | `NotificationTest.dismissedNotificationIsNotRepostedUntilNextTransition` |
+| **1. Annuler** un changement, un démarrage, un arrêt ; refus si autre chose a changé | `UndoAndBackdateTest.undoingASwitchReopensThePreviousSession`, `undoingAStartOrAStop`, `undoIsRefusedOnceSomethingElseChanged` |
+| **2. Démarrer plus tôt** : découpe sans chevauchement, bornes (session en cours, fin précédente, futur) | `UndoAndBackdateTest.startingEarlierSplitsTheRunningSessionWithoutOverlap`, `startingEarlierIsBoundedByTheRunningAndPreviousSessions` |
+| **3. Reprendre** : règle (interruptions successives, archivage), notification, widget, tuile | `InsightsTest.resumeTargetIsTheLastNonInterruptionActivity`, `ScheduledNotificationsTest.trackingNotificationRequestsLiveUpdateAndOffersResumeDuringABreak`, `SurfacesTest.duringABreakWidgetAndTileOfferToResumeThePreviousActivity` |
+| **4. Trous** : périodes non suivies jusqu'à maintenant, seuil, session en cours | `InsightsTest.gapsAreUntrackedPeriodsUntilNowOnly` |
+| **5. Objectifs** jour/semaine, jours atteints sur la semaine | `InsightsTest.goalsProgressPerDayAndOverAWeek` |
+| **6. Résumé du soir** : heure, jour vide ignoré, une fois par jour, canal silencieux, ouvre les bilans | `ScheduledNotificationsTest.eveningSummaryIsSilentDailyAndSkipsEmptyDays`, `InsightsTest.eveningSummaryText` |
+| **7. Rien n'est suivi** : délai, plage horaire, une fois par période, ouverture de l'app, retrait au démarrage, désactivé par défaut | `ScheduledNotificationsTest.idleReminderFiresOncePerIdlePeriodAndClearsWhenTrackingResumes`, `openingTheAppRestartsTheIdlePeriod`, `idleReminderIsOffByDefault`, `InsightsTest.idleReminderTimingWindowsAndOncePerPeriod` |
+| **8. Live Update** : demande de promotion et critères documentés, réglage pour la désactiver | `ScheduledNotificationsTest.trackingNotificationRequestsLiveUpdateAndOffersResumeDuringABreak` |
+| **9. Tendances** : comparaison au même moment, moyenne ; séries (objectif quotidien respecté) | `InsightsTest.weekComparisonAtTheSameMomentAndDailyAverage`, `streaksCountConsecutiveDaysAndRespectDailyGoals` |
+| **10. Sauvegarde automatique** : fichier restaurable, 8 copies, échéance hebdomadaire, échec puis nouvel essai | `AutoBackupTest` (dossier simulé en mémoire) |
+| Migration de la base v1 → v2 sans perte | `MigrationTest.version1DatabaseIsMigratedWithoutDataLoss` |
+| Sauvegarde v3 (objectifs, interruptions, préférences) et lecture des v1/v2 | `BackupTest.exportThenRestoreRoundTrip`, `version1BackupIsStillReadable` |
 | Permission refusée puis accordée | `NotificationTest.trackingWorksWithoutNotificationPermission` |
 | Redémarrage (récepteur déclaré + republication) | `NotificationTest.bootBroadcastRestoresNotificationFromDatabase` |
 
@@ -79,14 +91,25 @@ sur un fond neutre — le reste de l'écran d'accueil n'est pas simulé). Les PN
 | `10-aujourdhui-grand-texte` | Taille de texte ×1,8 (une colonne, chronomètre ajusté) |
 | `11-premier-lancement` | État vide « Aucune activité en cours » |
 | `12-session-oubliee`, `13-session-oubliee-correction` | Session oubliée |
-| `14-notification`, `15-notification-rappel` | Notification de suivi et rappel de session longue (vues construites par Android) |
+| `14-notification`, `15-notification-rappel`, `26-notification-inactivite` | Notifications de suivi, de session longue et « rien n'est suivi » (vues construites par Android) |
 | `19-ecran-accueil-widgets`, `20-ecran-accueil-widgets-sombre` | Widgets « Suivi en cours » et « Activités » |
+| `21-aujourdhui-pause-page-entiere` | Pause en cours : « Reprendre Travail », objectifs du jour |
+| `22-demarrer-plus-tot`, `23-annuler` | Appui long « Démarrer plus tôt », puis message « Annuler » |
+| `24-combler-un-trou` | Saisie préremplie depuis une période « Non suivi » de l'historique |
+| `05b-bilan-jour-page-entiere` | Objectifs du jour et séries en cours |
+| `06b-bilan-semaine-page-entiere` | Comparaison au même moment, moyenne, objectifs, évolution, séries, vue par jour |
+| `07b-reglages-page-entiere` | Réglages complets (Live Update, rappels, sauvegarde automatique) |
+| `25-modifier-activite` | Interruption et objectif d'une activité |
 
 Points vérifiés à la relecture : les dix raccourcis tiennent sur un écran, l'activité active est
 reconnaissable sans la couleur (négatif + « En cours »), le chronomètre reste sur une ligne en très
 grand texte, contrastes suffisants en clair comme en sombre, les états vides sont explicites.
 Corrections faites après relecture : rangée des favorites coupée dans le widget (ligne d'infos
 regroupée, favorites affichées seulement à partir de 170 dp), texte du rappel raccourci à une ligne.
+Bug trouvé par les tests et corrigé : la comparaison de semaines comptait des sessions de la
+semaine précédente postérieures au « même moment ».
+Non capturé : le résumé du soir (style « texte long » mal rendu par le simulateur) ; son contenu est
+vérifié par les tests.
 
 `14-notification.png` : le chronomètre natif de l'en-tête affiche bien la durée de la session
 (22:10), l'heure de début étant alignée sur l'horloge simulée de Robolectric. Le rendu HyperOS réel
@@ -103,8 +126,18 @@ regroupée, favorites affichées seulement à partir de 170 dp), texte du rappel
   affichage du sous-titre de la tuile, fonctionnement des boutons de widget après un arrêt forcé.
 - Le chronomètre des widgets et de la notification utilise le format du système (« 22:10 »,
   « 1:23:45 »), légèrement différent de l'app (« 00:22:10 »).
-- Rappel et rafraîchissement de minuit reposent sur des alarmes inexactes : ils peuvent arriver avec
-  quelques minutes de retard (choix volontaire : ni permission spéciale ni réveil de l'appareil).
+- Rappels, résumé, rafraîchissement de minuit et sauvegarde automatique reposent sur des alarmes
+  inexactes : ils peuvent arriver avec quelques minutes de retard (choix volontaire : ni permission
+  spéciale ni réveil de l'appareil).
+- **Live Update** : la demande de promotion et les critères documentés sont vérifiés, mais la
+  promotion effective dépend d'Android 16, des réglages de l'utilisateur et d'HyperOS (qui peut
+  appliquer ses propres critères) ; la méthode `hasPromotableCharacteristics()` de la plateforme
+  n'a pas pu être évaluée dans le simulateur.
+- **Sauvegarde automatique** : la logique (échéance, rotation, erreurs) est testée avec un dossier
+  simulé ; l'écriture réelle via le sélecteur de documents (permission persistante, création et
+  suppression de fichiers) n'a pas pu être exercée hors appareil.
+- Une session à cheval sur minuit compte pour les deux jours dans les séries (règle « au moins
+  1 min suivie ce jour-là »).
 - Sur Android 14+, l'utilisateur peut balayer la notification (hors écran verrouillé) : c'est
   voulu ; elle n'est pas republiée de force.
 - Le chronomètre natif s'affiche dans l'en-tête de la notification ; le texte affiche « En cours
@@ -115,18 +148,18 @@ regroupée, favorites affichées seulement à partir de 170 dp), texte du rappel
   l'heure n'est pas revenue après ce début (message explicite) ; on peut supprimer la session.
 - Les bilans utilisent le fuseau courant : après un voyage, les jours passés sont redécoupés selon
   le nouveau fuseau (les durées totales ne changent pas).
-- Pas d'annulation (« undo ») après suppression : une confirmation est demandée à la place.
+- Pas d'annulation (« undo ») après *suppression* dans l'historique (une confirmation est demandée) ;
+  l'annulation existe pour les changements d'activité et l'arrêt.
 - Les nouvelles couleurs par défaut des activités ne s'appliquent qu'à une installation neuve ;
   sur une installation existante, les couleurs se changent dans Réglages → Gérer les activités.
 - Restauration = remplacement complet (pas de fusion).
-- Live Updates / Always-on Display : hors périmètre.
+- Always-on Display : hors périmètre.
 
 ## Prochaines améliorations (hors périmètre de cette version)
 
-1. Tester sur le POCO et ajuster selon les résultats de `docs/TEST_POCO.md` (widgets, tuile, rappel compris).
-2. Promotion en « Live Update » Android 16 (`ProgressStyle` / notification promue) si HyperOS la prend en charge.
-3. Annulation de suppression (snackbar) et édition du début de la session active.
-4. Interface inter-apps protégée par permission de signature (voir `ARCHITECTURE.md`) et table `events` ;
+1. Tester sur le POCO et ajuster selon les résultats de `docs/TEST_POCO.md` (sections 16 à 21 pour
+   les nouveautés).
+2. Annulation après suppression dans l'historique et édition du début de la session active.
+3. Interface inter-apps protégée par permission de signature (voir `ARCHITECTURE.md`) et table `events` ;
    les widgets des futures apps (Coréen, Sport, Création) pourront suivre le même modèle que `surfaces/`.
-5. Objectifs hebdomadaires par activité et comparaison semaine précédente.
-6. Signature release avec un keystore personnel et intégration continue (build + tests).
+4. Signature release avec un keystore personnel et intégration continue (build + tests).

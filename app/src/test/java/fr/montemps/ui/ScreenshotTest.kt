@@ -16,13 +16,17 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import fr.montemps.MainActivity
 import fr.montemps.MonTempsApp
 import fr.montemps.domain.model.DefaultActivities
+import fr.montemps.domain.model.Goal
+import fr.montemps.domain.model.GoalPeriod
 import fr.montemps.notification.TrackingNotifier
 import fr.montemps.testutil.FakeTimeSource
 import fr.montemps.testutil.context
@@ -36,6 +40,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLooper
 import java.io.File
 import java.io.FileOutputStream
 import java.time.Instant
@@ -59,6 +64,19 @@ class ScreenshotTest {
 
     private fun seed(withActive: Boolean = true) = runBlocking {
         val e = c.editor
+        // Objectifs : Coréen 30 min par jour, Sport 3 h par semaine.
+        val korean = DefaultActivities.all.first { it.id == DefaultActivities.KOREAN }
+        val sport = DefaultActivities.all.first { it.id == DefaultActivities.SPORT }
+        c.catalog.edit(korean.id, korean.name, korean.color, null, goal = Goal(30, GoalPeriod.DAY))
+        c.catalog.edit(sport.id, sport.name, sport.color, null, goal = Goal(180, GoalPeriod.WEEK))
+        // Semaine précédente (pour la comparaison « au même moment »).
+        e.addPastSession(DefaultActivities.WORK, at("2026-10-26T09:00"), at("2026-10-26T17:00"), null)
+        e.addPastSession(DefaultActivities.WORK, at("2026-10-27T09:00"), at("2026-10-27T16:00"), null)
+        e.addPastSession(DefaultActivities.SPORT, at("2026-10-27T18:00"), at("2026-10-27T19:00"), null)
+        e.addPastSession(DefaultActivities.WORK, at("2026-10-28T09:00"), at("2026-10-28T12:00"), null)
+        // Coréen trois jours d'affilée (série en cours).
+        e.addPastSession(DefaultActivities.KOREAN, at("2026-11-02T07:00"), at("2026-11-02T07:35"), null)
+        e.addPastSession(DefaultActivities.KOREAN, at("2026-11-04T07:00"), at("2026-11-04T07:30"), null)
         // Semaine en cours (lundi 2 → mercredi 4 novembre), dont une session qui traverse minuit.
         e.addPastSession(DefaultActivities.WORK, at("2026-11-02T08:30"), at("2026-11-02T12:15"), null)
         e.addPastSession(DefaultActivities.MEAL, at("2026-11-02T12:15"), at("2026-11-02T13:00"), null)
@@ -99,6 +117,16 @@ class ScreenshotTest {
         rule.waitForIdle()
         Thread.sleep(300)
         rule.waitForIdle()
+        draw(name)
+    }
+
+    /** Capture sans attendre le repos (horloge des animations figée par le test). */
+    private fun shotNow(name: String) {
+        ShadowLooper.idleMainLooper()
+        draw(name)
+    }
+
+    private fun draw(name: String) {
         val views = rootViews()
         val base = views.first()
         val bmp = Bitmap.createBitmap(base.width, base.height, Bitmap.Config.ARGB_8888)
@@ -162,6 +190,95 @@ class ScreenshotTest {
         shot("07-reglages")
         tap("Gérer les activités")
         shot("08-activites")
+    }
+
+    /** Pause en cours : « Reprendre Travail », objectifs du jour (page entière). */
+    @Test
+    @Config(qualifiers = "w412dp-h1500dp-xhdpi")
+    fun breakWithResumeAndGoalsFullPage() {
+        seed(withActive = false)
+        runBlocking {
+            val now = time.now
+            time.now = at("2026-11-04T15:30")
+            c.tracker.switchTo(DefaultActivities.BREAK)
+            time.advance(java.time.Duration.between(time.now, now))
+        }
+        launch()
+        shot("21-aujourdhui-pause-page-entiere")
+    }
+
+    /** Appui long : « Démarrer plus tôt », puis le message « Annuler ». */
+    @Test
+    fun startEarlierThenUndo() {
+        seed()
+        launch()
+        val sport = androidx.compose.ui.test.hasContentDescription("Sport") and hasClickAction()
+        rule.waitUntil(5_000) { rule.onAllNodes(sport).fetchSemanticsNodes().isNotEmpty() }
+        rule.onAllNodes(sport).onFirst().performTouchInput { longClick() }
+        shotDialog("22-demarrer-plus-tot")
+        tap("Il y a 10 min")
+        rule.waitUntil(5_000) { rule.onAllNodes(hasText("Annuler")).fetchSemanticsNodes().isNotEmpty() }
+        shot("23-annuler")
+    }
+
+    /** Historique : période non suivie → saisie préremplie. */
+    @Test
+    fun fillAGapFromHistory() {
+        seed()
+        launch()
+        tap("Historique")
+        tapOn(androidx.compose.ui.test.hasContentDescription("Non suivi de 00:30", substring = true))
+        shot("24-combler-un-trou")
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h1500dp-xhdpi")
+    fun dayReportFullPage() {
+        seed()
+        launch()
+        tap("Bilans")
+        shot("05b-bilan-jour-page-entiere")
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h2400dp-xhdpi")
+    fun settingsFullPage() {
+        seed()
+        runBlocking {
+            c.preferences.setIdleReminder(true)
+            c.preferences.setEveningSummary(true)
+        }
+        launch()
+        tap("Réglages")
+        shot("07b-reglages-page-entiere")
+    }
+
+    @Test
+    fun activityEditorWithGoal() {
+        seed()
+        launch()
+        tap("Réglages")
+        tap("Gérer les activités")
+        // Le champ « Nom » de la boîte de dialogue peut recevoir le focus (mode non tactile du
+        // simulateur) : son curseur clignote indéfiniment. On fige donc l'horloge des animations.
+        rule.mainClock.autoAdvance = false
+        tap("Coréen")
+        rule.mainClock.advanceTimeBy(1_500)
+        shotNow("25-modifier-activite")
+    }
+
+    @Test
+    fun idleNotificationRendering() {
+        val idle = c.notifier.buildIdle(
+            fr.montemps.notification.IdleContent(
+                "14:10",
+                listOf(fr.montemps.notification.FavoriteAction("work", "Travail"), fr.montemps.notification.FavoriteAction("break", "Pause")),
+            ),
+        )
+        val ib = Notification.Builder.recoverBuilder(context(), idle)
+        renderRemoteViews(ib.createBigContentView() ?: ib.createContentView(), "26-notification-inactivite")
+        // Le résumé du soir (style « texte long ») n'est pas rendu fidèlement par le simulateur :
+        // son contenu est vérifié par ScheduledNotificationsTest.
     }
 
     @Test

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -43,6 +44,8 @@ class SessionEditViewModel(
     private val c: AppContainer,
     private val sessionId: Long?,
     private val date: LocalDate?,
+    /** Période préremplie (ex. un « trou » de l'historique à attribuer). */
+    private val prefill: Pair<Instant, Instant>? = null,
 ) : ViewModel() {
     private val zone: ZoneId get() = c.time.zone()
     private val _state = MutableStateFlow(SessionEditState())
@@ -67,17 +70,26 @@ class SessionEditViewModel(
                 val now = c.time.now().atZone(zone).toLocalDateTime().truncatedTo(ChronoUnit.MINUTES)
                 val day = date ?: now.toLocalDate()
                 val end = if (day == now.toLocalDate()) now.withMinute(now.minute - now.minute % 5) else LocalDateTime.of(day, LocalTime.of(10, 0))
+                // Trou à combler : début arrondi à la minute supérieure, fin à la minute inférieure,
+                // pour rester dans la période libre (les sessions suivies ont des secondes).
+                val prefillStart = prefill?.first?.let { roundUp(it).atZone(zone).toLocalDateTime() }
+                val prefillEnd = prefill?.second?.let { it.atZone(zone).toLocalDateTime().truncatedTo(ChronoUnit.MINUTES) }
                 _state.value = SessionEditState(
                     loading = false,
                     isNew = true,
                     activities = activities,
                     activityId = null,
-                    start = end.minusHours(1),
-                    end = end,
+                    start = prefillStart ?: end.minusHours(1),
+                    end = prefillEnd ?: end,
                     error = if (sessionId != null) "Cette session n'existe plus." else null,
                 )
             }
         }
+    }
+
+    private fun roundUp(i: Instant): Instant {
+        val t = i.truncatedTo(ChronoUnit.MINUTES)
+        return if (t == i) t else t.plusSeconds(60)
     }
 
     fun setActivity(id: String) = _state.update { it.copy(activityId = id, error = null) }

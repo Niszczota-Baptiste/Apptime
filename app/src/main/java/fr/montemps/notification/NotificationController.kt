@@ -1,6 +1,7 @@
 package fr.montemps.notification
 
 import fr.montemps.data.prefs.PreferencesRepository
+import fr.montemps.domain.ResumeRule
 import fr.montemps.domain.TrackingStore
 import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.time.TimeSource
@@ -40,11 +41,16 @@ class NotificationController(
         }
         val zone = time.zone()
         val today = time.now().atZone(zone).toLocalDate()
+        val byId = store.activities().associateBy { it.id }
+        // Pendant une interruption (Pause, Repas…) : « Reprendre Travail » en première action.
+        val resume = ResumeRule.resumeTarget(active, byId, store.recentEndedSessions(ResumeRule.LOOKBACK))
+        // Android n'affiche que 3 actions : [Reprendre] + favorites + Arrêter.
         val favorites = p.favoriteIds
-            .filter { it != active.activityId }
-            .mapNotNull { store.activity(it) }
+            .filter { it != active.activityId && it != resume?.id }
+            .mapNotNull { byId[it] }
             .filter { !it.archived }
             .map { FavoriteAction(it.id, it.name) }
+            .take(if (resume != null) 1 else 2)
         notifier.show(
             TrackingNotificationContent(
                 sessionId = active.id,
@@ -54,6 +60,8 @@ class NotificationController(
                 startLabel = Fmt.startLabel(active.start, today, zone),
                 favorites = favorites,
                 hideNameOnLockScreen = p.hideNameOnLockScreen,
+                resume = resume?.let { FavoriteAction(it.id, "Reprendre ${it.name}") },
+                promoted = p.promotedNotification,
             ),
         )
     }

@@ -20,6 +20,9 @@ class TrackingActionReceiver : BroadcastReceiver() {
         const val ACTION_REFRESH = "fr.montemps.action.REFRESH"
         const val ACTION_REMINDER = "fr.montemps.action.REMINDER"
         const val ACTION_ACKNOWLEDGE = "fr.montemps.action.ACKNOWLEDGE"
+        const val ACTION_IDLE = "fr.montemps.action.IDLE"
+        const val ACTION_SUMMARY = "fr.montemps.action.SUMMARY"
+        const val ACTION_AUTO_BACKUP = "fr.montemps.action.AUTO_BACKUP"
         const val EXTRA_ACTIVITY_ID = "activity_id"
         const val EXTRA_SESSION_ID = "session_id"
         const val EXTRA_SOURCE = "source"
@@ -38,7 +41,10 @@ class TrackingActionReceiver : BroadcastReceiver() {
                     ACTION_DISMISSED -> sessionId?.let { container.notifications.onUserDismissed(it) }
                     ACTION_REMINDER -> sessionId?.let { container.reminders.fire(it) }
                     ACTION_ACKNOWLEDGE -> sessionId?.let { container.reminders.acknowledge(it) }
-                    ACTION_REFRESH -> Unit
+                    ACTION_IDLE -> container.idle.fire()
+                    ACTION_SUMMARY -> container.summary.fire()
+                    // La sauvegarde due est faite par refreshOutputs() ci-dessous.
+                    ACTION_REFRESH, ACTION_AUTO_BACKUP -> Unit
                     else -> return@launch
                 }
                 // Toujours réaligner notification, widgets, tuile et alarmes sur la base.

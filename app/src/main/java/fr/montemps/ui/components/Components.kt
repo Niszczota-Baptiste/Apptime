@@ -1,8 +1,11 @@
 package fr.montemps.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -33,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +61,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.domain.report.Fmt
+import fr.montemps.domain.report.GoalProgress
 import fr.montemps.domain.report.PeriodReport
 import java.time.Duration
 
@@ -75,44 +81,133 @@ fun ActivityMarker(activity: TrackedActivity?, modifier: Modifier = Modifier, do
 }
 
 /**
- * Raccourci d'activité (un appui = démarrer). L'activité active est en négatif (fond encre,
- * texte clair) et porte la mention « En cours » : reconnaissable sans dépendre de la couleur.
+ * Raccourci d'activité : un appui démarre, un appui long propose de démarrer plus tôt.
+ * L'activité active est en négatif (fond encre, texte clair) et porte la mention « En cours » :
+ * reconnaissable sans dépendre de la couleur.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ActivityTile(activity: TrackedActivity, isActive: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ActivityTile(
+    activity: TrackedActivity,
+    isActive: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+) {
     val scheme = MaterialTheme.colorScheme
     val container by animateColorAsState(if (isActive) scheme.inverseSurface else scheme.surfaceContainer, label = "tile")
     val content by animateColorAsState(if (isActive) scheme.inverseOnSurface else scheme.onSurface, label = "tileContent")
-    Surface(
-        onClick = onClick,
-        modifier = modifier
+    val shape = RoundedCornerShape(18.dp)
+    Box(
+        modifier
             .heightIn(min = 64.dp)
+            .clip(shape)
+            .background(container)
+            .combinedClickable(
+                role = Role.Button,
+                onClickLabel = if (isActive) null else "Démarrer",
+                onLongClickLabel = if (onLongClick != null) "Démarrer plus tôt" else null,
+                onLongClick = onLongClick,
+                onClick = onClick,
+            )
             .semantics {
-                role = Role.Button
-                contentDescription = if (isActive) "${activity.name}, en cours" else "Démarrer ${activity.name}"
+                contentDescription = if (isActive) "${activity.name}, en cours" else activity.name
                 if (isActive) stateDescription = "En cours"
             },
-        shape = RoundedCornerShape(18.dp),
-        color = container,
-        contentColor = content,
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ActivityMarker(activity)
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    activity.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (isActive) {
-                    Text("En cours", style = MaterialTheme.typography.labelMedium, color = content.copy(alpha = 0.7f))
+        CompositionLocalProvider(LocalContentColor provides content) {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                ActivityMarker(activity)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        activity.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (isActive) {
+                        Text("En cours", style = MaterialTheme.typography.labelMedium, color = content.copy(alpha = 0.7f))
+                    }
                 }
             }
         }
     }
+}
+
+/** Progression d'un objectif : « Coréen  20 min / 30 min » et une barre fine à la couleur de l'activité. */
+@Composable
+fun GoalRow(progress: GoalProgress, caption: String? = null) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "${progress.activity.name} : ${Fmt.spoken(progress.done)} sur ${Fmt.spoken(progress.goal.target)}" +
+                    (if (progress.reached) ", objectif atteint" else "") + (caption?.let { ", $it" } ?: "")
+            },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ActivityMarker(progress.activity)
+            Spacer(Modifier.width(12.dp))
+            Text(progress.activity.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "${Fmt.short(progress.done)} / ${Fmt.short(progress.goal.target)}",
+                style = MaterialTheme.typography.bodyMedium.tabular(),
+                color = if (progress.reached) MaterialTheme.colorScheme.onSurface else muted,
+            )
+            if (progress.reached) {
+                Spacer(Modifier.width(6.dp))
+                Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        DistributionBar(listOf(activityColor(progress.activity) to progress.ratio.toFloat().coerceIn(0f, 1f)), height = 4.dp)
+        caption?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = muted, modifier = Modifier.padding(top = 4.dp)) }
+    }
+}
+
+/**
+ * Frise d'une journée : sessions colorées sur 24 h (durée réelle du jour), le reste en gris
+ * (non suivi), un trait pour l'heure actuelle. Décorative : le détail est dans la liste.
+ */
+@Composable
+fun DayTimeline(blocks: List<Pair<Color, ClosedFloatingPointRange<Float>>>, nowFraction: Float?, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Column(modifier.fillMaxWidth()) {
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(18.dp)
+                .clip(RoundedCornerShape(6.dp)),
+        ) {
+            drawRect(scheme.surfaceContainerHighest)
+            blocks.forEach { (color, range) ->
+                val x = size.width * range.start
+                val w = (size.width * (range.endInclusive - range.start)).coerceAtLeast(1f)
+                drawRect(color, topLeft = Offset(x, 0f), size = Size(w, size.height))
+            }
+            nowFraction?.let {
+                val x = size.width * it.coerceIn(0f, 1f)
+                drawRect(scheme.onSurface, topLeft = Offset(x - 1.dp.toPx(), 0f), size = Size(2.dp.toPx(), size.height))
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            listOf("0 h", "6 h", "12 h", "18 h", "24 h").forEach {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** « +1 h 05 » / « −30 min » (différence de durée, signe explicite). */
+fun signedShort(d: java.time.Duration): String = when {
+    d.isZero -> "="
+    d.isNegative -> "−${Fmt.short(d.abs())}"
+    else -> "+${Fmt.short(d)}"
 }
 
 /** Bouton pilule : principal (encre) ou discret (gris clair). */
@@ -176,7 +271,7 @@ fun PageHeader(title: String, modifier: Modifier = Modifier, actions: @Composabl
 
 /** Intitulé de section discret, avec valeur facultative alignée à droite. */
 @Composable
-fun SectionHeader(title: String, modifier: Modifier = Modifier, trailing: String? = null) {
+fun SectionHeader(title: String, modifier: Modifier = Modifier, trailing: String? = null, hint: String? = null) {
     Row(modifier.fillMaxWidth().padding(top = 28.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             title,
@@ -184,6 +279,9 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier, trailing: String
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
+        if (hint != null) {
+            Text(hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+        }
         if (trailing != null) {
             Text(trailing, style = MaterialTheme.typography.titleSmall.tabular(), color = MaterialTheme.colorScheme.onSurface)
         }

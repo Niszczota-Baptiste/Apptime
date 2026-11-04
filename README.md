@@ -8,21 +8,28 @@ Cible : POCO X8 Pro Max (Android 16 / HyperOS 3). Compatible Android 8.0 (API 26
 
 ## Fonctions (version 0.1.0)
 
-- **Aujourd'hui** : activité en cours (nom, icône, « EN COURS », chronomètre hh:mm:ss, heure de
-  début), bouton « Arrêter le suivi », raccourcis en un appui, total suivi et répartition du jour.
-- **Notification de suivi** : chronomètre natif, actions rapides vers 2 activités favorites et
-  « Arrêter », ouverture de l'app au toucher, option pour masquer le nom sur l'écran verrouillé.
-- **Historique** par jour : modifier, ajouter une session oubliée, supprimer (avec confirmation).
-  Validation : fin > début, pas de fin dans le futur, aucun chevauchement (session en cours comprise).
-- **Bilans** jour et semaine : durées, total suivi, pourcentages *du temps suivi*, temps non suivi
-  affiché explicitement, session en cours incluse, sessions à cheval sur minuit réparties.
-- **Activités** : 10 activités par défaut, création, renommage, couleur, ordre, archivage.
-- **Écran d'accueil** : widget « Suivi en cours » (activité, chronomètre natif, Arrêter,
-  favorites, total du jour) et widget « Activités » (un appui pour changer d'activité).
-- **Centre de contrôle** : tuile « Mon Temps » (arrêter le suivi, ou reprendre la dernière activité).
-- **Rappel de session longue** : une notification, une seule fois par session, au-delà du seuil
-  réglé (10 h par défaut) ; « Continuer » ou « Corriger ».
-- **Données** : export CSV, sauvegarde JSON versionnée, restauration validée et atomique.
+- **Aujourd'hui** : activité en cours (pastille, nom, chronomètre hh:mm:ss, heure de début),
+  « Arrêter le suivi », raccourcis en un appui, total suivi, répartition et objectifs du jour.
+- **Annuler** : après chaque changement, « Annuler » pendant quelques secondes (appui accidentel).
+- **Démarrer plus tôt** : appui long sur une activité → il y a 5, 10, 15, 30, 60 min ou une heure
+  précise, sans jamais chevaucher la session précédente.
+- **Reprendre** : pendant une interruption (Pause, Repas…), « Reprendre Travail » en un appui
+  (écran principal, notification, widget, tuile).
+- **Notification de suivi** : chronomètre natif, actions rapides, ouverture de l'app, option pour
+  masquer le nom sur l'écran verrouillé ; sur Android 16, affichage en haut de l'écran
+  (« Live Update », chronomètre dans la barre d'état) si le système l'autorise.
+- **Historique** par jour : frise des 24 h, sessions et périodes « Non suivi » à attribuer en un
+  appui ; modifier, ajouter, supprimer (avec confirmation). Aucun chevauchement possible.
+- **Bilans** jour et semaine : durées, pourcentages *du temps suivi*, temps non suivi explicite,
+  objectifs, comparaison avec la semaine précédente (au même moment), moyenne par jour, séries.
+- **Activités** : 10 activités par défaut, création, renommage, couleur, ordre, archivage,
+  interruption (reprise proposée), objectif par jour ou par semaine.
+- **Écran d'accueil** : widgets « Suivi en cours » et « Activités » ; **centre de contrôle** :
+  tuile « Mon Temps ».
+- **Rappels** (facultatifs, sobres) : session longue, « rien n'est suivi » dans une plage horaire,
+  résumé du soir (silencieux).
+- **Données** : export CSV, sauvegarde JSON versionnée, restauration validée et atomique,
+  **sauvegarde automatique hebdomadaire** dans un dossier choisi (8 copies conservées).
 - **Session oubliée** : à la réouverture, après un seuil réglable ou un redémarrage du téléphone,
   l'app propose de continuer ou de corriger l'heure de fin. Rien n'est inventé.
 
@@ -62,7 +69,7 @@ Prérequis : JDK 17 ou plus récent, Android SDK (plateforme 36). Le wrapper Gra
 ```bash
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties   # ou variable ANDROID_HOME
 ./gradlew :app:assembleDebug          # APK : app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (67 tests, régénère les captures)
+./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (96 tests, régénère les captures)
 ./gradlew :app:lintDebug              # analyse Android Lint
 ./gradlew :app:assembleRelease        # APK release minifiée (non signée : configurer un keystore)
 ```

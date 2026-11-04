@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import fr.montemps.AppContainer
 import fr.montemps.domain.model.Session
 import fr.montemps.domain.model.TrackedActivity
+import fr.montemps.domain.report.Gap
+import fr.montemps.domain.report.Gaps
 import fr.montemps.domain.report.ReportCalculator
 import fr.montemps.ui.displayTicker
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,6 +31,22 @@ data class HistoryItem(
     val endsAfter: Boolean,
 )
 
+/** Ligne de l'historique : une session, ou une période non suivie à combler. */
+sealed interface HistoryEntry {
+    val start: Instant
+
+    data class SessionEntry(val item: HistoryItem) : HistoryEntry {
+        override val start: Instant get() = item.session.start
+    }
+
+    data class GapEntry(val gap: Gap) : HistoryEntry {
+        override val start: Instant get() = gap.start
+    }
+}
+
+/** Bloc de la frise : couleur ARGB et position dans la journée (fractions 0..1). */
+data class TimelineBlock(val color: Int, val from: Float, val to: Float)
+
 data class HistoryUiState(
     val date: LocalDate,
     val today: LocalDate,
@@ -36,6 +54,11 @@ data class HistoryUiState(
     val now: Instant,
     val items: List<HistoryItem>,
     val trackedInDay: Duration,
+    /** Sessions et trous (≥ 5 min), du plus récent au plus ancien. */
+    val entries: List<HistoryEntry> = emptyList(),
+    val timeline: List<TimelineBlock> = emptyList(),
+    /** Position de l'heure actuelle dans la journée affichée, si c'est aujourd'hui. */
+    val nowFraction: Float? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -63,6 +86,9 @@ class HistoryViewModel(private val c: AppContainer) : ViewModel() {
                 endsAfter = (s.end ?: now).isAfter(to),
             )
         }
+        val length = Duration.between(from, to).toMillis().toFloat()
+        fun fraction(i: Instant) = (Duration.between(from, i).toMillis() / length).coerceIn(0f, 1f)
+        val gaps = Gaps.find(list, from, to, now, minimum = Duration.ofMinutes(5))
         HistoryUiState(
             date = date,
             today = now.atZone(zone).toLocalDate(),
@@ -70,6 +96,13 @@ class HistoryViewModel(private val c: AppContainer) : ViewModel() {
             now = now,
             items = items,
             trackedInDay = items.fold(Duration.ZERO) { acc, i -> acc + i.durationInDay },
+            entries = (items.map { HistoryEntry.SessionEntry(it) } + gaps.map { HistoryEntry.GapEntry(it) })
+                .sortedByDescending { it.start },
+            timeline = list.mapNotNull { s ->
+                val end = minOf(s.end ?: now, to)
+                if (!end.isAfter(s.start)) null else TimelineBlock(byId[s.activityId]?.color ?: 0xFF9A9AA0.toInt(), fraction(s.start), fraction(end))
+            },
+            nowFraction = if (now.isAfter(from) && now.isBefore(to)) fraction(now) else null,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

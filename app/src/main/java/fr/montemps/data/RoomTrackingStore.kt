@@ -24,7 +24,7 @@ class RoomTrackingStore(private val db: MonTempsDatabase) : TrackingStore {
     override suspend fun sessionsOverlapping(from: Instant, to: Instant): List<Session> =
         sessionDao.getOverlapping(from.toEpochMilli(), to.toEpochMilli()).map { it.toDomain() }
     override suspend fun latestEnd(): Instant? = sessionDao.latestEnd()?.let(Instant::ofEpochMilli)
-    override suspend fun lastEndedSession(): Session? = sessionDao.lastEnded()?.toDomain()
+    override suspend fun recentEndedSessions(limit: Int): List<Session> = sessionDao.recentEnded(limit).map { it.toDomain() }
     override suspend fun insertSession(session: Session): Long = sessionDao.insert(session.toEntity().copy(id = 0))
     override suspend fun updateSession(session: Session) = sessionDao.update(session.toEntity())
     override suspend fun deleteSession(id: Long) = sessionDao.delete(id)
@@ -46,6 +46,9 @@ class RoomTrackingStore(private val db: MonTempsDatabase) : TrackingStore {
 
     fun observeActivities(): Flow<List<TrackedActivity>> =
         activityDao.observeAll().map { list -> list.map { it.toDomain() } }.distinctUntilChanged()
+
+    fun observeRecentEnded(limit: Int): Flow<List<Session>> =
+        sessionDao.observeRecentEnded(limit).map { list -> list.map { it.toDomain() } }.distinctUntilChanged()
 
     fun observeActiveSession(): Flow<Session?> =
         sessionDao.observeActive().map { it?.toDomain() }.distinctUntilChanged()

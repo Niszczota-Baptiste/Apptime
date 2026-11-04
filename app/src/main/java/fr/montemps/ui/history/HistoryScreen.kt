@@ -1,6 +1,10 @@
 package fr.montemps.ui.history
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -36,16 +41,24 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.montemps.domain.report.Fmt
+import fr.montemps.domain.report.Gap
 import fr.montemps.ui.ScreenScaffold
 import fr.montemps.ui.components.ActivityMarker
 import fr.montemps.ui.components.AddFab
 import fr.montemps.ui.components.DatePickerDialogFor
+import fr.montemps.ui.components.DayTimeline
 import fr.montemps.ui.components.PageHeader
 import fr.montemps.ui.components.tabular
+import java.time.Instant
 import java.time.LocalDate
 
 @Composable
-fun HistoryScreen(vm: HistoryViewModel, onEdit: (Long) -> Unit, onAdd: (LocalDate) -> Unit) {
+fun HistoryScreen(
+    vm: HistoryViewModel,
+    onEdit: (Long) -> Unit,
+    onAdd: (LocalDate) -> Unit,
+    onFillGap: (LocalDate, Instant, Instant) -> Unit,
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     var pickDate by remember { mutableStateOf(false) }
     ScreenScaffold(fab = { AddFab("Ajouter", onClick = { onAdd(vm.selectedDate()) }) }) { padding ->
@@ -86,6 +99,15 @@ fun HistoryScreen(vm: HistoryViewModel, onEdit: (Long) -> Unit, onAdd: (LocalDat
                 }
             }
             item {
+                DayTimeline(
+                    blocks = s.timeline.map { Color(it.color) to (it.from..it.to) },
+                    nowFraction = s.nowFraction,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 10.dp).semantics(mergeDescendants = true) {
+                        contentDescription = "Frise de la journée : ${Fmt.spoken(s.trackedInDay)} suivies"
+                    },
+                )
+            }
+            item {
                 Text(
                     if (s.items.isEmpty()) "Aucune session ce jour." else "Temps suivi : ${Fmt.short(s.trackedInDay)}",
                     style = MaterialTheme.typography.bodyMedium,
@@ -105,8 +127,16 @@ fun HistoryScreen(vm: HistoryViewModel, onEdit: (Long) -> Unit, onAdd: (LocalDat
                     )
                 }
             }
-            items(s.items, key = { it.session.id }) { item ->
-                HistoryRow(item, s) { onEdit(item.session.id) }
+            items(s.entries, key = { e ->
+                when (e) {
+                    is HistoryEntry.SessionEntry -> "s-" + e.item.session.id
+                    is HistoryEntry.GapEntry -> "g-" + e.gap.start.toEpochMilli()
+                }
+            }) { e ->
+                when (e) {
+                    is HistoryEntry.SessionEntry -> HistoryRow(e.item, s) { onEdit(e.item.session.id) }
+                    is HistoryEntry.GapEntry -> GapRow(e.gap, s) { onFillGap(s.date, e.gap.start, e.gap.end) }
+                }
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
@@ -116,6 +146,37 @@ fun HistoryScreen(vm: HistoryViewModel, onEdit: (Long) -> Unit, onAdd: (LocalDat
                 pickDate = false
             }
         }
+    }
+}
+
+/** Période non suivie : un appui ouvre la saisie d'une session préremplie avec ces heures. */
+@Composable
+private fun GapRow(gap: Gap, s: HistoryUiState, onClick: () -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val zone = s.zone
+    val endsNow = !gap.end.isBefore(s.now.minusSeconds(1))
+    val endText = if (endsNow) "maintenant" else Fmt.time(gap.end, zone)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick, onClickLabel = "Attribuer une activité")
+            .heightIn(min = 56.dp)
+            .padding(vertical = 10.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Non suivi de ${Fmt.time(gap.start, zone)} à $endText, ${Fmt.spoken(gap.duration)}. Toucher pour attribuer une activité."
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(10.dp).border(1.5.dp, muted, CircleShape))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Non suivi", style = MaterialTheme.typography.bodyLarge, color = muted)
+            Text("${Fmt.time(gap.start, zone)} – $endText · Attribuer", style = MaterialTheme.typography.bodyMedium.tabular(), color = muted)
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(Fmt.short(gap.duration), style = MaterialTheme.typography.bodyLarge.tabular(), color = muted)
     }
 }
 

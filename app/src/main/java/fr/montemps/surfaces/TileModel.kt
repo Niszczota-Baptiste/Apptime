@@ -25,6 +25,18 @@ data class TileModel(
 
         fun from(state: SurfaceState): TileModel {
             val active = state.active
+            val resume = state.resumeActivity
+            if (active != null && resume != null) {
+                // Pendant une interruption (Pause, Repas…), un appui reprend l'activité précédente.
+                val name = state.activeActivity?.name ?: active.activityId
+                return TileModel(
+                    label = name,
+                    subtitle = "Reprendre ${resume.name}",
+                    active = true,
+                    description = "$APP_NAME : $name en cours depuis ${state.startLabel}. Toucher pour reprendre ${resume.name}.",
+                    action = TileAction.Resume(resume.id),
+                )
+            }
             if (active != null) {
                 val name = state.activeActivity?.name ?: active.activityId
                 return TileModel(
