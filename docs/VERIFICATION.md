@@ -157,7 +157,7 @@ vérifié par les tests.
 
 ## Prochaines améliorations (hors périmètre de cette version)
 
-1. Tester sur le POCO et ajuster selon les résultats de `docs/TEST_POCO.md` (sections 16 à 21 pour
+1. Tester sur le POCO et ajuster selon les résultats de `docs/TEST_POCO.md` (sections 15 à 20 pour
    les nouveautés).
 2. Annulation après suppression dans l'historique et édition du début de la session active.
 3. Interface inter-apps protégée par permission de signature (voir `ARCHITECTURE.md`) et table `events` ;

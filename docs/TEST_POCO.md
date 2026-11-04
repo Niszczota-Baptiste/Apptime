@@ -109,39 +109,39 @@ un redémarrage, le rafraîchissement de minuit et le rappel).
 3. « Continuer » : la notification disparaît ; à la réouverture, aucune question pour cette session.
 4. Remettre le seuil souhaité (10 h par défaut). Le rappel peut être désactivé dans Réglages → Suivi.
 
-## 16. Annuler et démarrer plus tôt
+## 15. Annuler et démarrer plus tôt
 1. Toucher Pause par erreur pendant Travail → toucher « Annuler » dans le message en bas : Travail
    reprend, comme si de rien n'était (historique, notification, widgets).
 2. Appui long sur Sport → « Il y a 10 min » : Sport commence 10 min plus tôt, l'activité précédente
    s'arrête à ce moment. Vérifier que les durées proposées ne remontent jamais avant le début de la
    session en cours.
 
-## 17. Reprendre après une pause
+## 16. Reprendre après une pause
 1. Travail, puis Pause : l'écran principal, la notification, le widget et la tuile proposent
    « Reprendre Travail ». Un appui reprend Travail.
 2. Dans Réglages → Gérer les activités, marquer une autre activité comme « Interruption » et vérifier
    le même comportement.
 
-## 18. Historique : frise et trous
+## 17. Historique : frise et trous
 1. Historique : la frise montre la journée ; les périodes « Non suivi » (≥ 5 min) apparaissent dans
    la liste. En toucher une : la saisie s'ouvre avec les bonnes heures ; choisir une activité, enregistrer.
 
-## 19. Objectifs, tendances, séries
+## 18. Objectifs, tendances, séries
 1. Donner un objectif à Coréen (30 min par jour) et à Sport (3 h par semaine).
 2. Vérifier la progression dans « Aujourd'hui » et dans Bilans (jour et semaine), la comparaison
    avec la semaine précédente, la moyenne et les séries.
 
-## 20. Rappels et résumé
+## 19. Rappels et résumé
 1. Activer « Rappel “rien n'est suivi” » avec un délai d'1 h, arrêter le suivi, ne pas rouvrir
    l'app : une notification arrive environ 1 h plus tard (dans la plage horaire), une seule fois.
 2. Activer le résumé du soir à une heure proche : notification silencieuse ; un appui ouvre les bilans.
 
-## 21. Haut de l'écran (Android 16) et sauvegarde automatique
+## 20. Haut de l'écran (Android 16) et sauvegarde automatique
 1. Pendant un suivi, vérifier si HyperOS affiche le chronomètre en haut de l'écran (puce / île).
    Sinon : Réglages → « Live Updates désactivés dans Android » le cas échéant. Noter le rendu exact.
 2. Réglages → Sauvegarde automatique → choisir un dossier : un fichier `mon-temps-auto-…json` y
    apparaît aussitôt. Vérifier qu'il se restaure (Réglages → Restaurer une sauvegarde).
 
-## 22. Affichage
+## 21. Affichage
 - Thème sombre du système → l'app suit.
 - Taille de police maximale (Paramètres → Affichage) → textes lisibles, raccourcis sur une colonne.
