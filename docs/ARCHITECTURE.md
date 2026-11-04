@@ -1,0 +1,156 @@
+# Architecture et décisions
+
+## Vue d'ensemble
+
+Un seul module Gradle (`app`), découpé en paquets à responsabilités nettes. La taille actuelle
+du projet ne justifie pas une modularisation Gradle ; les frontières sont prêtes pour la faire
+plus tard (le paquet `domain` n'importe rien d'Android).
+
+```
+ui (Compose, ViewModel, StateFlow)
+   │  appelle
+   ▼
+domain : TimeTracker · SessionEditor · ActivityCatalog · ReportCalculator   ← Kotlin pur
+   │  via le port TrackingStore
+   ▼
+data : RoomTrackingStore (Room) · PreferencesRepository (DataStore) · BackupService
+notification : NotificationController → TrackingNotifier ; récepteurs → TimeTracker
+```
+
+- **Logique centralisée.** L'écran « Aujourd'hui », les actions de notification et (plus tard)
+  les apps compagnons passent par `TimeTracker` (`TrackingCommands`). Toute écriture passe par
+  un `WriteLock` partagé + une transaction Room, puis déclenche `ChangeListener` qui resynchronise
+  la notification.
+- **Injection manuelle** (`AppContainer`) : une instance par processus.
+
+## Modèle de données
+
+| Table | Colonnes principales |
+|-------|----------------------|
+| `activities` | `id` (texte stable), `name`, `color` (ARGB), `icon` (émoji), `sort_order`, `archived` |
+| `sessions` | `id`, `activity_id` → activities (RESTRICT), `start_utc_ms`, `end_utc_ms` (NULL = en cours), `zone_id`, `note`, `start_elapsed_ms`, `start_boot_count`, `source` |
+
+- Intervalles **semi-ouverts** `[début, fin)` : une session peut commencer à l'instant exact où la
+  précédente se termine (changement A → B sans trou ni chevauchement).
+- **Triggers SQLite** (défense en profondeur) : refus d'une seconde session active et d'une fin
+  ≤ début, même si la logique applicative était contournée.
+- Identifiants d'activités par défaut : `work`, `driving`, `break`, `meal`, `korean`, `sport`,
+  `writing`, `music`, `free_time`, `other`. Activités créées : UUID.
+- Schéma Room exporté dans `app/schemas/` (base des futures migrations).
+
+### Renommage d'une activité
+
+Le nom n'est stocké que dans `activities`. Les sessions référencent l'identifiant. **Renommer une
+activité renomme donc tout son historique** (bilans passés, export CSV). C'est le comportement
+attendu pour corriger une faute ou préciser un libellé. Pour distinguer une activité réellement
+nouvelle, il faut en créer une autre et archiver l'ancienne : l'archivage la retire des
+raccourcis mais conserve ses sessions, visibles dans l'historique avec la mention « (archivée) ».
+
+## Règles métier implémentées
+
+1. Une seule session active (logique + trigger).
+2. Appuyer sur une activité démarre son suivi.
+3. A → B : fin de A et début de B au même instant, dans une transaction.
+4. Réappuyer sur l'activité active : aucun effet (`NoChange`).
+5. « Arrêter le suivi » laisse ensuite du temps non suivi.
+6. « Pause » est une activité comme une autre.
+7. Le temps non suivi n'est jamais attribué automatiquement ; les bilans l'affichent à part.
+8. Doubles appuis / actions répétées : idempotence (`NoChange`), verrou d'écriture, et l'action
+   « Arrêter » de la notification porte l'identifiant de la session visée (une action périmée
+   n'arrête pas une session plus récente).
+9. Chaque transition est atomique (transaction Room).
+10. Horloge reculée sous la dernière transition enregistrée : la transition est **refusée** avec
+    un message (plutôt que créer un chevauchement ou inventer une heure).
+
+## Temps : instants, fuseaux, horloge monotone
+
+- **Instants** : millisecondes UTC depuis l'époque Unix ; JSON en ISO-8601 (`…Z`). Toutes les
+  durées sont reconstruites à partir des instants de début/fin ; aucun compteur n'est incrémenté.
+- **Fuseau** : celui du téléphone au moment de l'affichage. Il sert à afficher les heures et à
+  découper jours (minuit → minuit) et semaines (lundi → lundi, ISO). Le fuseau de démarrage de
+  chaque session est enregistré (`zone_id`) à titre informatif et dans l'export CSV.
+- **Monotone** : `elapsedRealtime` + `BOOT_COUNT` au démarrage de la session. Pendant un même
+  démarrage, l'écart entre durée calendaire et durée monotone révèle une modification de l'heure
+  système : l'écran « Aujourd'hui » affiche alors un avertissement. Les durées restent calculées
+  sur l'heure calendaire (seule mesure valable après un redémarrage) ; l'utilisateur corrige si besoin.
+- **Saisie manuelle** : heures locales converties dans le fuseau courant. Heure inexistante
+  (passage à l'heure d'été) → décalée vers l'avant ; heure ambiguë (retour à l'heure d'hiver) →
+  premier décalage. Règles standard de `java.time`.
+
+### Comportements en situation
+
+| Situation | Comportement |
+|-----------|--------------|
+| App en arrière-plan | Rien ne tourne. La notification (chronomètre natif) avance seule. L'écran se met à jour au retour. |
+| Processus détruit par Android | Aucune perte : la session active est en base. Au prochain lancement (app, action de notification, démarrage), la notification est resynchronisée. La notification déjà affichée reste en place et son chronomètre continue. |
+| App retirée des récentes | Équivalent à une destruction de processus sur Android standard : la notification et la session restent. Certaines surcouches peuvent aussi retirer la notification ; la session, elle, est intacte. |
+| Redémarrage du téléphone | `BOOT_COMPLETED` → republication de la notification depuis la base (si autorisée). À la réouverture, l'app signale la session (« le téléphone a redémarré depuis ») et propose Continuer / Corriger l'heure de fin. |
+| Arrêt forcé (Paramètres → Forcer l'arrêt) | Android retire les notifications et **bloque les diffusions** (y compris `BOOT_COMPLETED`) jusqu'à la prochaine ouverture manuelle. La session reste en base ; elle réapparaît à l'ouverture, avec la même proposition de correction si elle semble oubliée. |
+| Changement de fuseau | Durées inchangées (instants UTC). Les heures affichées et le découpage des jours suivent le nouveau fuseau ; `TIMEZONE_CHANGED` met à jour le texte « En cours depuis … » de la notification. |
+| Correction de l'heure système | Durées calculées sur la nouvelle heure ; avertissement si l'écart avec l'horloge monotone dépasse 2 min. Si l'heure recule avant la dernière transition, les changements sont refusés tant que l'heure n'est pas cohérente (la session en cours peut être supprimée, ou corrigée après coup). |
+| Session à cheval sur minuit | Un seul enregistrement ; les bilans répartissent la durée entre les jours. L'historique l'affiche sur chaque jour concerné (« Dont X ce jour »). |
+| Plusieurs jours | Idem, les jours intermédiaires sont couverts à 100 %. |
+| Heure d'été / d'hiver | Les journées durent 23 h ou 25 h ; les bilans utilisent la durée réelle et le signalent. |
+
+### Pourquoi ni service au premier plan ni wake lock
+
+Le suivi ne nécessite aucun calcul continu : deux horodatages suffisent, et le chronomètre de
+notification est animé par le système (`setUsesChronometer` + `setWhen`). Aucun type de service au
+premier plan ne correspond honnêtement à un chronomètre manuel (le seul candidat serait
+`specialUse`, sans justification réelle ici). Depuis Android 14, une notification « ongoing » ordinaire
+peut de toute façon être balayée par l'utilisateur (sauf écran verrouillé) : l'app respecte ce choix
+et ne la republie pas pour cette session ; elle réapparaît au changement d'activité suivant, ou via
+« Réafficher » (écran Aujourd'hui ou Réglages). Aucune republication périodique.
+
+## Notification
+
+- Canal « Suivi en cours », importance *par défaut* sans son ni vibration (`setSilent`,
+  `setOnlyAlertOnce`) pour figurer dans la liste normale et sur l'écran verrouillé.
+- Catégorie `stopwatch`, `setOngoing(true)`, `setLocalOnly(true)`.
+- Actions : jusqu'à 2 favorites + « Arrêter ». **Une favorite déjà active est masquée** (elle
+  n'aurait aucun effet). Le toucher sur la notification ouvre l'app.
+- Écran verrouillé : `VISIBILITY_PUBLIC` par défaut ; avec « Masquer le nom », `VISIBILITY_PRIVATE`
+  + version publique « Suivi en cours » avec le chronomètre. L'affichage effectif dépend des
+  réglages Android/HyperOS (notifications sur écran verrouillé, contenu sensible).
+- Autorisation refusée : le suivi fonctionne normalement dans l'app ; une carte propose
+  d'autoriser (demande système une seule fois, puis renvoi vers les réglages).
+- PendingIntent explicites, immuables, vers un récepteur **non exporté**.
+- Pas de notification plein écran, pas de faux appel, pas de « Live Update » dans cette version.
+
+## Sauvegarde
+
+- **CSV** : `;` + BOM UTF-8 (Excel/LibreOffice en français), heures locales et UTC, durée en
+  secondes et hh:mm:ss, note échappée.
+- **JSON** : `format = "mon-temps-backup"`, `formatVersion = 1`, activités, sessions, préférences.
+- **Restauration** : décodage et validation complète *avant* toute écriture (format, version,
+  identifiants, références, dates, fuseaux, chevauchements, au plus une session active, pas de
+  futur), puis confirmation, puis remplacement dans **une seule transaction**. Un fichier invalide
+  ne modifie rien.
+- Sélecteur de documents Android (SAF) : aucune permission de stockage. Sauvegarde cloud
+  automatique Android désactivée (`allowBackup=false`) : l'utilisateur garde la maîtrise.
+
+## Préparation des futures applications (Coréen, Sport, Création)
+
+Aucune interface inter-apps n'est exposée dans cette version. Ce qui est prêt :
+
+- `TrackingCommands` (`currentSession`, `switchTo(activityId, source)`, `stop`) : interface métier
+  stable ; `CommandSource.External(packageName)` est enregistré dans `sessions.source`.
+- Identifiants d'activités stables et indépendants de la langue (`korean`, `sport`, `writing`, `music`).
+
+Stratégie prévue (à implémenter quand la première app compagnon existera) :
+
+1. Déclarer dans le manifeste une permission `fr.montemps.permission.CONTROL_TRACKING` avec
+   `android:protectionLevel="signature"` : seules les apps signées avec la même clé (les miennes)
+   l'obtiennent.
+2. Exposer un composant protégé par cette permission, au choix :
+   - un `BroadcastReceiver` exporté (`android:permission=…`) pour des commandes simples
+     « passer à `korean` » / « arrêter » (fire-and-forget, pratique depuis une notification) ;
+   - un service lié (AIDL ou `Messenger`) si une réponse est nécessaire (session en cours, résultat) ;
+   - un `ContentProvider` en lecture seule (`readPermission` signature) pour consulter les sessions.
+3. Le composant ne fait que traduire la requête en appel `TrackingCommands`, avec
+   `CommandSource.External(callingPackage)` et validation de l'identifiant d'activité.
+4. Pour « enregistrer un événement » (ex. quiz terminé), ajouter une table `events`
+   (identifiant, type, instant, activité liée facultative, charge utile JSON) via une migration Room.
+
+Ne pas partager la base Room entre apps : chaque app garde ses données privées et communique par
+ces composants explicites. Ne jamais utiliser `sharedUserId` (déprécié).

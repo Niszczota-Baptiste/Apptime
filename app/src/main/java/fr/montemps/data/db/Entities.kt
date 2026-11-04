@@ -1,0 +1,73 @@
+package fr.montemps.data.db
+
+import androidx.room.ColumnInfo
+import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
+import androidx.room.PrimaryKey
+import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.TrackedActivity
+import java.time.Instant
+
+@Entity(tableName = "activities")
+data class ActivityEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val color: Int,
+    val icon: String?,
+    @ColumnInfo(name = "sort_order") val sortOrder: Int,
+    val archived: Boolean,
+)
+
+@Entity(
+    tableName = "sessions",
+    foreignKeys = [
+        ForeignKey(
+            entity = ActivityEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["activity_id"],
+            onDelete = ForeignKey.RESTRICT,
+        ),
+    ],
+    indices = [Index("activity_id"), Index("start_utc_ms"), Index("end_utc_ms")],
+)
+data class SessionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "activity_id") val activityId: String,
+    /** Début, millisecondes depuis l'époque Unix (UTC). */
+    @ColumnInfo(name = "start_utc_ms") val startUtcMs: Long,
+    /** Fin (UTC) ; NULL = session en cours. */
+    @ColumnInfo(name = "end_utc_ms") val endUtcMs: Long?,
+    @ColumnInfo(name = "zone_id") val zoneId: String,
+    val note: String?,
+    @ColumnInfo(name = "start_elapsed_ms") val startElapsedMs: Long?,
+    @ColumnInfo(name = "start_boot_count") val startBootCount: Int?,
+    val source: String,
+)
+
+fun ActivityEntity.toDomain() = TrackedActivity(id, name, color, icon, sortOrder, archived)
+fun TrackedActivity.toEntity() = ActivityEntity(id, name, color, icon, sortOrder, archived)
+
+fun SessionEntity.toDomain() = Session(
+    id = id,
+    activityId = activityId,
+    start = Instant.ofEpochMilli(startUtcMs),
+    end = endUtcMs?.let(Instant::ofEpochMilli),
+    zoneId = zoneId,
+    note = note,
+    startElapsedRealtimeMs = startElapsedMs,
+    startBootCount = startBootCount,
+    source = source,
+)
+
+fun Session.toEntity() = SessionEntity(
+    id = id,
+    activityId = activityId,
+    startUtcMs = start.toEpochMilli(),
+    endUtcMs = end?.toEpochMilli(),
+    zoneId = zoneId,
+    note = note,
+    startElapsedMs = startElapsedRealtimeMs,
+    startBootCount = startBootCount,
+    source = source,
+)

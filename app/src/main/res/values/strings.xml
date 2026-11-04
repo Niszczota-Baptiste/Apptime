@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nom affiché de l'application : le modifier ici suffit pour la renommer. -->
+    <string name="app_name">Mon Temps</string>
+
+    <string name="notification_channel_name">Suivi en cours</string>
+    <string name="notification_channel_description">Activité suivie et durée écoulée. Sans son ni vibration.</string>
+    <string name="notification_running_since">En cours depuis %1$s</string>
+    <string name="notification_public_title">Suivi en cours</string>
+    <string name="action_stop_tracking">Arrêter</string>
+</resources>
