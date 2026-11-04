@@ -8,17 +8,21 @@ import fr.montemps.domain.model.CommandSource
 import kotlinx.coroutines.launch
 
 /**
- * Actions de la notification (non exporté : seules nos PendingIntent l'atteignent).
- * Les actions répétées sont idempotentes : passer à l'activité déjà active ou arrêter une
- * session déjà arrêtée ne fait rien.
+ * Actions venant de la notification, des widgets, de la tuile et des alarmes de l'app.
+ * Non exporté : seules nos PendingIntent explicites l'atteignent. Les actions répétées sont
+ * idempotentes (passer à l'activité déjà active ou arrêter une session déjà arrêtée ne fait rien).
  */
-class NotificationActionReceiver : BroadcastReceiver() {
+class TrackingActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_SWITCH = "fr.montemps.action.SWITCH"
         const val ACTION_STOP = "fr.montemps.action.STOP"
         const val ACTION_DISMISSED = "fr.montemps.action.DISMISSED"
+        const val ACTION_REFRESH = "fr.montemps.action.REFRESH"
+        const val ACTION_REMINDER = "fr.montemps.action.REMINDER"
+        const val ACTION_ACKNOWLEDGE = "fr.montemps.action.ACKNOWLEDGE"
         const val EXTRA_ACTIVITY_ID = "activity_id"
         const val EXTRA_SESSION_ID = "session_id"
+        const val EXTRA_SOURCE = "source"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -26,20 +30,19 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val pending: PendingResult? = goAsync()
         container.appScope.launch {
             try {
+                val source = CommandSource.ofSurface(intent.getStringExtra(EXTRA_SOURCE))
+                val sessionId = intent.getLongExtra(EXTRA_SESSION_ID, -1L).takeIf { it > 0 }
                 when (intent.action) {
-                    ACTION_SWITCH -> intent.getStringExtra(EXTRA_ACTIVITY_ID)?.let {
-                        container.tracker.switchTo(it, CommandSource.Notification)
-                    }
-                    ACTION_STOP -> {
-                        val expected = intent.getLongExtra(EXTRA_SESSION_ID, -1L).takeIf { it > 0 }
-                        container.tracker.stop(CommandSource.Notification, expected)
-                    }
-                    ACTION_DISMISSED -> {
-                        val id = intent.getLongExtra(EXTRA_SESSION_ID, -1L)
-                        if (id > 0) container.notifications.onUserDismissed(id)
-                    }
+                    ACTION_SWITCH -> intent.getStringExtra(EXTRA_ACTIVITY_ID)?.let { container.tracker.switchTo(it, source) }
+                    ACTION_STOP -> container.tracker.stop(source, sessionId)
+                    ACTION_DISMISSED -> sessionId?.let { container.notifications.onUserDismissed(it) }
+                    ACTION_REMINDER -> sessionId?.let { container.reminders.fire(it) }
+                    ACTION_ACKNOWLEDGE -> sessionId?.let { container.reminders.acknowledge(it) }
+                    ACTION_REFRESH -> Unit
+                    else -> return@launch
                 }
-                if (intent.action != ACTION_DISMISSED) container.notifications.sync()
+                // Toujours réaligner notification, widgets, tuile et alarmes sur la base.
+                if (intent.action != ACTION_DISMISSED) container.refreshOutputs()
             } finally {
                 pending?.finish()
             }
@@ -49,8 +52,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
 /**
  * Événements système (diffusions protégées, émises uniquement par Android) : redémarrage, mise à
- * jour de l'app, changement d'heure ou de fuseau. On se contente de resynchroniser la
- * notification à partir de la base ; aucune donnée n'est modifiée.
+ * jour de l'app, changement d'heure ou de fuseau. Tout est recalculé depuis la base (notification,
+ * widgets, tuile, alarmes — celles-ci sont effacées par un redémarrage) ; aucune donnée n'est modifiée.
  */
 class SystemEventReceiver : BroadcastReceiver() {
     private val handled = setOf(
@@ -66,7 +69,7 @@ class SystemEventReceiver : BroadcastReceiver() {
         val pending: PendingResult? = goAsync()
         container.appScope.launch {
             try {
-                container.notifications.sync()
+                container.refreshOutputs()
             } finally {
                 pending?.finish()
             }

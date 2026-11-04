@@ -31,10 +31,47 @@
             </intent-filter>
         </activity>
 
-        <!-- Actions de notification : non exporté, atteint uniquement par nos PendingIntent explicites. -->
+        <!-- Actions (notification, widgets, tuile, alarmes de l'app) : non exporté, atteint
+             uniquement par nos PendingIntent explicites. -->
         <receiver
-            android:name=".notification.NotificationActionReceiver"
+            android:name=".notification.TrackingActionReceiver"
             android:exported="false" />
+
+        <!-- Widgets d'écran d'accueil (mises à jour envoyées par le système). -->
+        <receiver
+            android:name=".surfaces.TrackingWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_tracking_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tracking_info" />
+        </receiver>
+        <receiver
+            android:name=".surfaces.ActivitiesWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_activities_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_activities_info" />
+        </receiver>
+
+        <!-- Tuile du centre de contrôle : liée uniquement par le système (permission dédiée). -->
+        <service
+            android:name=".surfaces.TrackingTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_tracking"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
 
         <!-- Diffusions système protégées : seul Android peut les émettre. -->
         <receiver

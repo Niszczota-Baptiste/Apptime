@@ -27,6 +27,7 @@ import fr.montemps.notification.TrackingNotifier
 import fr.montemps.testutil.FakeTimeSource
 import fr.montemps.testutil.context
 import fr.montemps.testutil.testContainer
+import fr.montemps.testutil.useContainer
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -83,8 +84,8 @@ class ScreenshotTest {
 
     private fun launch() {
         shadowOf(context() as Application).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-        (context() as MonTempsApp).container = c
-        c.notifier.ensureChannel()
+        useContainer(c)
+        c.notifier.ensureChannels()
         runBlocking { c.preferences.setNotificationPermissionAsked() }
         ActivityScenario.launch(MainActivity::class.java)
         rule.waitForIdle()
@@ -201,14 +202,6 @@ class ScreenshotTest {
     }
 
     @Test
-    fun withActivityIcons() {
-        runBlocking { c.preferences.setShowIcons(true) }
-        seed()
-        launch()
-        shot("18-aujourdhui-icones")
-    }
-
-    @Test
     fun todayLargeFont() {
         RuntimeEnvironment.setFontScale(1.8f)
         seed()
@@ -242,9 +235,10 @@ class ScreenshotTest {
      */
     @Test
     fun notificationRendering() {
-        val start = Instant.ofEpochMilli(System.currentTimeMillis()).minusSeconds(22 * 60 + 10)
+        // Horloge murale *simulée* par Robolectric (celle que lit le chronomètre de la notification).
+        val start = Instant.ofEpochMilli(org.robolectric.shadows.ShadowSystem.currentTimeMillis()).minusSeconds(22 * 60 + 10)
         val content = fr.montemps.notification.TrackingNotificationContent(
-            sessionId = 1, activityName = "Travail", activityIcon = null, activityColor = 0xFF4A78E0.toInt(),
+            sessionId = 1, activityName = "Travail", activityColor = 0xFF4A78E0.toInt(),
             start = start, startLabel = "15:20",
             favorites = listOf(fr.montemps.notification.FavoriteAction(DefaultActivities.BREAK, "Pause")),
             hideNameOnLockScreen = false,
@@ -252,6 +246,67 @@ class ScreenshotTest {
         val n = c.notifier.build(content)
         val builder = Notification.Builder.recoverBuilder(context(), n)
         renderRemoteViews(builder.createBigContentView() ?: builder.createContentView(), "14-notification")
+    }
+
+    /** Notification de rappel (session longue), telle que construite par Android. */
+    @Test
+    fun reminderNotificationRendering() {
+        val n = c.notifier.buildReminder(
+            fr.montemps.notification.ReminderContent(
+                sessionId = 1, activityName = "Travail", sinceLabel = "hier 21:05", durationLabel = "12 h 25",
+                hideNameOnLockScreen = false,
+            ),
+        )
+        // Vue étendue : titre, texte et actions « Continuer » / « Corriger ».
+        val builder = Notification.Builder.recoverBuilder(context(), n)
+        renderRemoteViews(builder.createBigContentView() ?: builder.createContentView(), "15-notification-rappel")
+    }
+
+    @Test
+    fun homeScreenWidgetsLight() = homeScreen("19-ecran-accueil-widgets", top = 0xFFE7E3DC.toInt(), bottom = 0xFFC3CAD3.toInt())
+
+    @Test
+    @Config(qualifiers = "w412dp-h892dp-night-xhdpi")
+    fun homeScreenWidgetsDark() = homeScreen("20-ecran-accueil-widgets-sombre", top = 0xFF2B2F36.toInt(), bottom = 0xFF0E0F12.toInt())
+
+    /**
+     * Rendu réel des deux widgets (RemoteViews appliquées par le gestionnaire de widgets simulé),
+     * posés sur un fond d'écran neutre. Le reste de l'écran d'accueil n'est pas simulé.
+     */
+    private fun homeScreen(name: String, top: Int, bottom: Int) {
+        seed()
+        useContainer(c)
+        // Chronomètres natifs : base exprimée dans l'horloge monotone simulée de Robolectric.
+        time.elapsed = android.os.SystemClock.elapsedRealtime()
+        val awm = shadowOf(android.appwidget.AppWidgetManager.getInstance(context()))
+        awm.setAlwaysRecreateViewsDuringUpdate(true)
+        val trackingId = awm.createWidget(fr.montemps.surfaces.TrackingWidgetProvider::class.java, fr.montemps.R.layout.widget_tracking)
+        val activitiesId = awm.createWidget(fr.montemps.surfaces.ActivitiesWidgetProvider::class.java, fr.montemps.R.layout.widget_activities)
+        runBlocking {
+            kotlinx.coroutines.delay(300) // laisse finir les mises à jour asynchrones déclenchées à la création
+            c.surfaces.refresh()
+        }
+        val d = context().resources.displayMetrics.density
+        val bmp = Bitmap.createBitmap((412 * d).toInt(), (892 * d).toInt(), Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val paint = android.graphics.Paint().apply {
+            shader = android.graphics.LinearGradient(0f, 0f, 0f, bmp.height.toFloat(), top, bottom, android.graphics.Shader.TileMode.CLAMP)
+        }
+        canvas.drawRect(0f, 0f, bmp.width.toFloat(), bmp.height.toFloat(), paint)
+        canvas.drawBitmap(renderView(awm.getViewFor(trackingId), 380, 190), 16 * d, 92 * d, null)
+        canvas.drawBitmap(renderView(awm.getViewFor(activitiesId), 380, 338), 16 * d, 302 * d, null)
+        save(bmp, name)
+    }
+
+    private fun renderView(view: View, widthDp: Int, heightDp: Int): Bitmap {
+        val d = context().resources.displayMetrics.density
+        val w = (widthDp * d).toInt()
+        val h = (heightDp * d).toInt()
+        view.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY))
+        view.layout(0, 0, w, h)
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bmp))
+        return bmp
     }
 
     private fun renderRemoteViews(remote: android.widget.RemoteViews, name: String) {

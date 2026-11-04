@@ -49,7 +49,9 @@ import fr.montemps.ui.ScreenScaffold
 import fr.montemps.ui.components.ActivityMarker
 import fr.montemps.ui.components.PageHeader
 import fr.montemps.ui.components.SectionHeader
-import fr.montemps.ui.label
+import fr.montemps.surfaces.ActivitiesWidgetProvider
+import fr.montemps.surfaces.HomeScreenRequests
+import fr.montemps.surfaces.TrackingWidgetProvider
 import java.time.LocalDate
 
 @Composable
@@ -78,7 +80,6 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
     ScreenScaffold(snackbar = snackbar) { padding ->
         val s = state ?: return@ScreenScaffold
         val byId = s.activities.associateBy { it.id }
-        val showIcons = s.prefs.showIcons
         Column(
             Modifier
                 .fillMaxSize()
@@ -95,7 +96,7 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
                 val id = s.prefs.favoriteIds.getOrNull(slot)
                 SettingsRow(
                     title = "Action rapide ${slot + 1}",
-                    value = id?.let { byId[it]?.label(showIcons) } ?: "Aucune",
+                    value = id?.let { byId[it]?.name } ?: "Aucune",
                     onClick = { favoriteSlot = slot },
                 )
             }
@@ -122,15 +123,30 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
                     "d'Android et d'HyperOS ; le rendu exact varie selon l'appareil.",
             )
 
-            Group("Affichage")
-            SwitchRow("Icônes des activités", "Émojis à la place des pastilles de couleur.", s.prefs.showIcons, vm::setShowIcons)
+            Group("Écran d'accueil")
+            SettingsRow("Widget « Suivi en cours »", "Activité, chronomètre, Arrêter et favorites.", onClick = {
+                if (!HomeScreenRequests.pinWidget(context, TrackingWidgetProvider::class.java)) vm.message(HomeScreenRequests.MANUAL_WIDGET)
+            })
+            SettingsRow("Widget « Activités »", "Changer d'activité d'un appui.", onClick = {
+                if (!HomeScreenRequests.pinWidget(context, ActivitiesWidgetProvider::class.java)) vm.message(HomeScreenRequests.MANUAL_WIDGET)
+            })
+            SettingsRow("Tuile du centre de contrôle", "Arrêter ou reprendre le suivi.", onClick = {
+                HomeScreenRequests.addTile(context) { vm.message(it) }
+            })
+            Help("Également possible à la main : appui long sur l'écran d'accueil → Widgets → Mon Temps.")
 
             Group("Suivi")
             SettingsRow(
-                "Session peut-être oubliée",
-                "Signalée à la réouverture, ou après un redémarrage.",
+                "Session longue",
+                "Au-delà, la session est signalée comme peut-être oubliée.",
                 value = "${s.prefs.forgottenThresholdHours} h",
                 onClick = { chooseThreshold = true },
+            )
+            SwitchRow(
+                "Rappel de session longue",
+                "Une notification, une seule fois par session.",
+                s.prefs.longSessionReminder,
+                vm::setReminder,
             )
             SettingsRow("Gérer les activités", "Créer, renommer, réordonner, archiver.", onClick = onManageActivities)
 
@@ -168,7 +184,7 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
     }
     if (chooseThreshold) {
         PickDialog(
-            title = "Signaler une session après…",
+            title = "Session longue après…",
             options = AppPreferences.thresholdChoices,
             label = { "$it heures" },
             leading = { },

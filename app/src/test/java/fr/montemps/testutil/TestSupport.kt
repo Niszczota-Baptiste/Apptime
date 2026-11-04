@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.core.app.ApplicationProvider
 import fr.montemps.AppContainer
+import fr.montemps.MonTempsApp
+import kotlinx.coroutines.runBlocking
 import fr.montemps.data.db.MonTempsDatabase
 import fr.montemps.domain.time.TimeSource
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +37,17 @@ class FakeTimeSource(
 }
 
 fun context(): Context = ApplicationProvider.getApplicationContext()
+
+/**
+ * Installe le conteneur de test dans l'application. On attend d'abord la tâche de démarrage du
+ * conteneur réel (sinon elle pourrait, en se terminant plus tard, annuler une notification
+ * publiée par le test).
+ */
+fun useContainer(container: AppContainer) {
+    val app = context() as MonTempsApp
+    runBlocking { app.startup.join() }
+    app.container = container
+}
 
 /** Conteneur complet branché sur une base en mémoire, un DataStore temporaire et une horloge factice. */
 fun testContainer(

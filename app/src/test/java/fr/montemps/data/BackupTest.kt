@@ -33,7 +33,7 @@ class BackupTest {
         time.now = time.now.plusSeconds(60)
         source.tracker.switchTo(WORK)
         val json = source.backup.exportJson()
-        assertTrue(json.contains("\"formatVersion\": 1"))
+        assertTrue(json.contains("\"formatVersion\": 2"))
 
         val target = testContainer(time)
         target.editor.addPastSession(BREAK, morning.minus(Duration.ofDays(1)), morning.minus(Duration.ofDays(1)).plusHours(1), null)
@@ -58,7 +58,7 @@ class BackupTest {
         val cases = mapOf(
             "pas du json" to "{ ceci n'est pas",
             "autre format" to valid.replace("mon-temps-backup", "autre-app"),
-            "version future" to valid.replace("\"formatVersion\": 1", "\"formatVersion\": 99"),
+            "version future" to valid.replace("\"formatVersion\": 2", "\"formatVersion\": 99"),
             "activité inconnue" to valid.replace("\"activityId\": \"work\"", "\"activityId\": \"fantome\""),
             "date invalide" to valid.replace("2026-11-04T07:00:00Z", "hier matin"),
             "session future" to valid.replace("2026-11-04T08:00:00Z", "2030-01-01T00:00:00Z"),
@@ -67,6 +67,21 @@ class BackupTest {
             assertTrue("$label devrait être refusé", c.backup.decode(text) is DecodeResult.Invalid)
         }
         assertEquals(before, c.store.allSessions())
+    }
+
+    @Test
+    fun version1BackupIsStillReadable() {
+        val v1 = """
+            {"format":"mon-temps-backup","formatVersion":1,"exportedAt":"2026-11-04T18:00:00Z",
+             "activities":[{"id":"work","name":"Travail","color":"#1E88E5","icon":"💼","sortOrder":0}],
+             "sessions":[{"id":1,"activityId":"work","start":"2026-11-04T07:00:00Z","end":"2026-11-04T09:00:00Z","zoneId":"Europe/Paris"}],
+             "preferences":{"favoriteIds":["work"],"notificationEnabled":true,"hideNameOnLockScreen":false,"forgottenThresholdHours":8}}
+        """.trimIndent()
+        val r = BackupCodec.decode(v1, time.now) as DecodeResult.Valid
+        assertEquals(1, r.snapshot.sessions.size)
+        assertEquals(8, r.snapshot.preferences.forgottenThresholdHours)
+        // Champ apparu en v2 : valeur par défaut.
+        assertTrue(r.snapshot.preferences.longSessionReminder)
     }
 
     @Test

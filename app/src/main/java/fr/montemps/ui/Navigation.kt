@@ -43,12 +43,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -56,12 +54,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import fr.montemps.MonTempsApp
-import fr.montemps.data.prefs.AppPreferences
 import fr.montemps.ui.activities.ActivitiesScreen
 import fr.montemps.ui.activities.ActivitiesViewModel
 import fr.montemps.ui.components.AppIcons
-import fr.montemps.ui.components.LocalShowIcons
 import fr.montemps.ui.history.HistoryScreen
 import fr.montemps.ui.history.HistoryViewModel
 import fr.montemps.ui.history.SessionEditScreen
@@ -90,8 +85,6 @@ fun MonTempsNavHost(startRoute: String = TopLevel.TODAY.route) {
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val showBottomBar = TopLevel.entries.any { it.route == route } || route == null
-    val container = (LocalContext.current.applicationContext as MonTempsApp).container
-    val prefs by container.preferences.preferences.collectAsStateWithLifecycle(initialValue = AppPreferences())
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -107,7 +100,7 @@ fun MonTempsNavHost(startRoute: String = TopLevel.TODAY.route) {
             }
         },
     ) { outer ->
-        CompositionLocalProvider(LocalHasBottomBar provides showBottomBar, LocalShowIcons provides prefs.showIcons) {
+        CompositionLocalProvider(LocalHasBottomBar provides showBottomBar) {
             NavHost(nav, startDestination = startRoute, modifier = Modifier.padding(outer).consumeWindowInsets(outer)) {
                 composable(TopLevel.TODAY.route) {
                     TodayScreen(

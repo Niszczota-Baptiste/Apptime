@@ -2,4 +2,12 @@
 <resources>
     <color name="window_background">#F7F7F5</color>
     <color name="launcher_background">#151516</color>
+    <!-- Widgets (résolus par le lanceur : clair / sombre automatiques). -->
+    <color name="widget_background">#F7F7F5</color>
+    <color name="widget_tile">#ECECE9</color>
+    <color name="widget_tile_active">#151516</color>
+    <color name="widget_text">#151516</color>
+    <color name="widget_text_on_active">#F7F7F5</color>
+    <color name="widget_muted">#6A6A70</color>
+    <color name="widget_ghost">#D2D2CE</color>
 </resources>

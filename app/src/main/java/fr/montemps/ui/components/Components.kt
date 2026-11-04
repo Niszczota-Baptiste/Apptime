@@ -34,7 +34,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,7 +43,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
@@ -61,9 +59,6 @@ import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.report.PeriodReport
 import java.time.Duration
 
-/** Réglage « Icônes des activités » : émoji à la place de la pastille de couleur. Fourni à la racine. */
-val LocalShowIcons = staticCompositionLocalOf { false }
-
 /** Chiffres à chasse fixe : un chronomètre qui ne « danse » pas. */
 fun TextStyle.tabular(): TextStyle = copy(fontFeatureSettings = "tnum")
 
@@ -71,16 +66,11 @@ fun TextStyle.tabular(): TextStyle = copy(fontFeatureSettings = "tnum")
 fun activityColor(activity: TrackedActivity?): Color =
     activity?.let { Color(it.color) } ?: MaterialTheme.colorScheme.outline
 
-/** Repère discret d'une activité : pastille de couleur, ou émoji si l'option est activée. */
+/** Repère discret d'une activité : une pastille de sa couleur (aucune icône, par sobriété). */
 @Composable
 fun ActivityMarker(activity: TrackedActivity?, modifier: Modifier = Modifier, dotSize: Dp = 10.dp) {
-    val icon = activity?.icon?.takeIf { LocalShowIcons.current && it.isNotBlank() }
     Box(modifier.widthIn(min = 20.dp), contentAlignment = Alignment.Center) {
-        if (icon != null) {
-            Text(icon, style = MaterialTheme.typography.titleMedium, modifier = Modifier.clearAndSetSemantics { })
-        } else {
-            Box(Modifier.size(dotSize).clip(CircleShape).background(activityColor(activity)))
-        }
+        Box(Modifier.size(dotSize).clip(CircleShape).background(activityColor(activity)))
     }
 }
 

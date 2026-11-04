@@ -13,7 +13,10 @@ import java.time.ZoneId
  * Format de sauvegarde JSON versionné.
  *
  * Les instants sont en ISO-8601 UTC (« 2026-11-04T08:15:00Z »). `formatVersion` est incrémenté
- * à chaque changement incompatible ; la lecture accepte les versions <= [BackupCodec.CURRENT_VERSION].
+ * à chaque changement de format ; la lecture accepte les versions 1 à [BackupCodec.CURRENT_VERSION].
+ *
+ * Historique : v1 = version initiale ; v2 = ajout de `preferences.longSessionReminder`
+ * (absent d'un fichier v1 : valeur par défaut `true`).
  */
 @Serializable
 data class BackupFile(
@@ -56,6 +59,7 @@ data class BackupPreferences(
     val notificationEnabled: Boolean = true,
     val hideNameOnLockScreen: Boolean = false,
     val forgottenThresholdHours: Int = 10,
+    val longSessionReminder: Boolean = true,
 )
 
 /** Contenu validé d'une sauvegarde, prêt à être écrit. */
@@ -72,7 +76,7 @@ sealed interface DecodeResult {
 
 object BackupCodec {
     const val FORMAT_ID = "mon-temps-backup"
-    const val CURRENT_VERSION = 1
+    const val CURRENT_VERSION = 2
 
     private val json = Json {
         prettyPrint = true

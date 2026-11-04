@@ -14,6 +14,7 @@ import fr.montemps.domain.model.DefaultActivities.WORK
 import fr.montemps.testutil.FakeTimeSource
 import fr.montemps.testutil.context
 import fr.montemps.testutil.testContainer
+import fr.montemps.testutil.useContainer
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -35,8 +36,8 @@ class NotificationTest {
     @Before
     fun setUp() {
         shadowOf(context() as Application).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-        (context() as MonTempsApp).container = c
-        c.notifier.ensureChannel()
+        useContainer(c)
+        c.notifier.ensureChannels()
         nm.cancelAll()
     }
 
@@ -76,15 +77,6 @@ class NotificationTest {
         deliver(stop.actionIntent)
         assertNull(c.tracker.currentSession())
         assertNull(current())
-    }
-
-    @Test
-    fun iconsInNotificationFollowDisplayPreference() = runBlocking {
-        c.preferences.setShowIcons(true)
-        c.tracker.switchTo(WORK)
-        val n = current()!!
-        assertEquals("💼 Travail", n.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
-        assertEquals(listOf("☕ Pause", "Arrêter"), n.actions.map { it.title.toString() })
     }
 
     @Test
@@ -141,10 +133,10 @@ class NotificationTest {
     /** Livre l'Intent d'une PendingIntent de notification à son récepteur, comme le ferait Android. */
     private fun deliver(pi: android.app.PendingIntent) {
         val intent = shadowOf(pi).savedIntent
-        assertEquals(NotificationActionReceiver::class.java.name, intent.component!!.className)
+        assertEquals(TrackingActionReceiver::class.java.name, intent.component!!.className)
         assertTrue(shadowOf(pi).isBroadcast)
         assertTrue("PendingIntent immuable", shadowOf(pi).flags and android.app.PendingIntent.FLAG_IMMUTABLE != 0)
-        NotificationActionReceiver().onReceive(context(), intent)
+        TrackingActionReceiver().onReceive(context(), intent)
         idle()
     }
 

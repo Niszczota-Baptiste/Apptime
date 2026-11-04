@@ -42,10 +42,6 @@ fun displayTicker(time: TimeSource, periodMs: Long = 1_000): Flow<Instant> = flo
     }
 }
 
-/** Libellé d'une activité, précédé de son émoji si l'option « Icônes des activités » est active. */
-fun TrackedActivity.label(showIcons: Boolean): String =
-    if (showIcons) listOfNotNull(icon?.takeIf { it.isNotBlank() }, name).joinToString(" ") else name
-
 /** Couverture d'une période : le temps non suivi n'est jamais attribué à une activité. */
 fun coverageText(report: PeriodReport): String = when {
     !report.hasStarted -> "Période à venir."

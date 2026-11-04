@@ -24,6 +24,7 @@ class RoomTrackingStore(private val db: MonTempsDatabase) : TrackingStore {
     override suspend fun sessionsOverlapping(from: Instant, to: Instant): List<Session> =
         sessionDao.getOverlapping(from.toEpochMilli(), to.toEpochMilli()).map { it.toDomain() }
     override suspend fun latestEnd(): Instant? = sessionDao.latestEnd()?.let(Instant::ofEpochMilli)
+    override suspend fun lastEndedSession(): Session? = sessionDao.lastEnded()?.toDomain()
     override suspend fun insertSession(session: Session): Long = sessionDao.insert(session.toEntity().copy(id = 0))
     override suspend fun updateSession(session: Session) = sessionDao.update(session.toEntity())
     override suspend fun deleteSession(id: Long) = sessionDao.delete(id)

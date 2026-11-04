@@ -16,7 +16,12 @@ Cible : POCO X8 Pro Max (Android 16 / HyperOS 3). Compatible Android 8.0 (API 26
   Validation : fin > début, pas de fin dans le futur, aucun chevauchement (session en cours comprise).
 - **Bilans** jour et semaine : durées, total suivi, pourcentages *du temps suivi*, temps non suivi
   affiché explicitement, session en cours incluse, sessions à cheval sur minuit réparties.
-- **Activités** : 10 activités par défaut, création, renommage, couleur, icône, ordre, archivage.
+- **Activités** : 10 activités par défaut, création, renommage, couleur, ordre, archivage.
+- **Écran d'accueil** : widget « Suivi en cours » (activité, chronomètre natif, Arrêter,
+  favorites, total du jour) et widget « Activités » (un appui pour changer d'activité).
+- **Centre de contrôle** : tuile « Mon Temps » (arrêter le suivi, ou reprendre la dernière activité).
+- **Rappel de session longue** : une notification, une seule fois par session, au-delà du seuil
+  réglé (10 h par défaut) ; « Continuer » ou « Corriger ».
 - **Données** : export CSV, sauvegarde JSON versionnée, restauration validée et atomique.
 - **Session oubliée** : à la réouverture, après un seuil réglable ou un redémarrage du téléphone,
   l'app propose de continuer ou de corriger l'heure de fin. Rien n'est inventé.
@@ -31,7 +36,12 @@ Pensée pour ne pas distraire :
 - l'activité en cours est affichée en négatif (fond encre) avec la mention « En cours » ;
 - les dix raccourcis tiennent sur un écran, et ne bougent pas quand on démarre ou arrête ;
 - pas de cartes ni d'ombres, une barre de navigation fine, des titres intégrés au contenu ;
-- option « Icônes des activités » (Réglages → Affichage) pour remplacer les pastilles par des émojis.
+- aucune icône ni émoji : une activité = un nom et une pastille de couleur ;
+- les widgets reprennent exactement ce langage (clair/sombre selon le système).
+
+Ajout des widgets et de la tuile : Réglages → Écran d'accueil (si l'écran d'accueil ou
+l'interface système ne propose pas l'ajout direct : appui long sur l'écran d'accueil → Widgets →
+Mon Temps ; centre de contrôle → Modifier → Mon Temps).
 
 Captures (rendues par les tests, données réelles en base) : [`docs/screenshots/`](docs/screenshots).
 
@@ -52,7 +62,7 @@ Prérequis : JDK 17 ou plus récent, Android SDK (plateforme 36). Le wrapper Gra
 ```bash
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties   # ou variable ANDROID_HOME
 ./gradlew :app:assembleDebug          # APK : app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (53 tests, régénère les captures)
+./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (67 tests, régénère les captures)
 ./gradlew :app:lintDebug              # analyse Android Lint
 ./gradlew :app:assembleRelease        # APK release minifiée (non signée : configurer un keystore)
 ```
@@ -86,7 +96,8 @@ app/src/main/java/fr/montemps/
 │   ├── TrackingStore.kt    Port de persistance
 │   └── report/             Calcul des bilans, formatage français
 ├── data/                   Room (base, DAO, triggers d'intégrité), DataStore, sauvegarde CSV/JSON
-├── notification/           Notification de suivi, récepteurs (actions, démarrage, heure)
+├── notification/           Notifications (suivi, rappel), actions, alarmes, événements système
+├── surfaces/               Widgets d'écran d'accueil et tuile du centre de contrôle
 ├── ui/                     Compose : today, history, reports, activities, settings, components
 ├── AppContainer.kt         Assemblage des dépendances (sans framework d'injection)
 └── MonTempsApp.kt / MainActivity.kt

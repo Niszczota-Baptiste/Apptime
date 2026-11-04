@@ -16,7 +16,10 @@ data class TrackedActivity(
     val name: String,
     /** Couleur ARGB (0xFFRRGGBB). */
     val color: Int,
-    /** Icône sous forme de court texte/émoji, facultative. */
+    /**
+     * Icône facultative. Non affichée : l'interface reste sobre (pastille de couleur uniquement).
+     * Conservée dans le modèle et les sauvegardes pour compatibilité.
+     */
     val icon: String?,
     val sortOrder: Int,
     val archived: Boolean,
@@ -56,8 +59,19 @@ data class Session(
 sealed class CommandSource(val id: String) {
     data object App : CommandSource("app")
     data object Notification : CommandSource("notification")
+    data object Widget : CommandSource("widget")
+    data object Tile : CommandSource("tile")
     data object Manual : CommandSource("manual")
     data object Restore : CommandSource("restore")
     /** Future application compagnon identifiée par son nom de paquet. */
     data class External(val packageName: String) : CommandSource("external:$packageName")
+
+    companion object {
+        /** Source des commandes reçues par le récepteur d'actions (notification, widget, tuile). */
+        fun ofSurface(id: String?): CommandSource = when (id) {
+            Widget.id -> Widget
+            Tile.id -> Tile
+            else -> Notification
+        }
+    }
 }

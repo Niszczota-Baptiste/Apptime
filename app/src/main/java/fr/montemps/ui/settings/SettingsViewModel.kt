@@ -36,7 +36,7 @@ class SettingsViewModel(private val c: AppContainer) : ViewModel() {
 
     private fun update(block: suspend () -> Unit) = viewModelScope.launch {
         block()
-        c.notifications.sync()
+        c.refreshOutputs()
     }
 
     fun setFavorite(slot: Int, activityId: String?) = update {
@@ -48,8 +48,10 @@ class SettingsViewModel(private val c: AppContainer) : ViewModel() {
 
     fun setNotificationEnabled(v: Boolean) = update { c.preferences.setNotificationEnabled(v) }
     fun setHideName(v: Boolean) = update { c.preferences.setHideNameOnLockScreen(v) }
-    fun setShowIcons(v: Boolean) = update { c.preferences.setShowIcons(v) }
     fun setThreshold(h: Int) = update { c.preferences.setForgottenThresholdHours(h) }
+    fun setReminder(v: Boolean) = update { c.preferences.setLongSessionReminder(v) }
+
+    fun message(text: String) = viewModelScope.launch { messages.send(text) }
     fun reshowNotification() = viewModelScope.launch { c.notifications.reshow() }
 
     fun exportCsv(resolver: ContentResolver, uri: Uri) = io("Export CSV enregistré.") {

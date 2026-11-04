@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aperçu statique affiché dans le sélecteur de widgets (Android 12+). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="12dp"
+    tools:ignore="HardcodedText">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:paddingStart="6dp"
+        android:paddingEnd="0dp"
+        android:paddingBottom="8dp"
+        android:text="@string/widget_activities_label"
+        android:textColor="@color/widget_muted"
+        android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="-3dp"
+        android:layout_marginBottom="6dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginHorizontal="3dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_tile_active"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="14dp"
+            android:text="Travail"
+            android:textColor="@color/widget_text_on_active"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginHorizontal="3dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_tile"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="14dp"
+            android:text="Pause"
+            android:textColor="@color/widget_text"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="-3dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginHorizontal="3dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_tile"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="14dp"
+            android:text="Repas"
+            android:textColor="@color/widget_text"
+            android:textSize="14sp" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_marginHorizontal="3dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_tile"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="14dp"
+            android:text="Sport"
+            android:textColor="@color/widget_text"
+            android:textSize="14sp" />
+    </LinearLayout>
+</LinearLayout>

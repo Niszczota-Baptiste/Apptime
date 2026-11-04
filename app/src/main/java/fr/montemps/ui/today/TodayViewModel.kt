@@ -113,7 +113,10 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
         if (r is TransitionResult.Rejected) messages.send(r.reason.message())
     }
 
-    fun continueForgotten(sessionId: Long) = viewModelScope.launch { c.preferences.acknowledgeSession(sessionId) }
+    fun continueForgotten(sessionId: Long) = viewModelScope.launch {
+        c.reminders.acknowledge(sessionId)
+        c.refreshOutputs()
+    }
 
     fun endForgottenAt(sessionId: Long, end: Instant) = viewModelScope.launch {
         when (val r = c.tracker.stopAt(sessionId, end)) {
@@ -127,7 +130,7 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
 
     fun onPermissionResult() = viewModelScope.launch {
         c.preferences.setNotificationPermissionAsked()
-        c.notifications.sync()
+        c.refreshOutputs()
     }
 
     fun canPostNotifications(): Boolean = c.notifier.canPost()

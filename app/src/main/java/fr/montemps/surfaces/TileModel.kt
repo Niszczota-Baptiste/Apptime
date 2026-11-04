@@ -1,0 +1,58 @@
+package fr.montemps.surfaces
+
+/** Ce que fait un appui sur la tuile du centre de contrôle. */
+sealed interface TileAction {
+    /** Arrêter la session affichée (et seulement elle). */
+    data class Stop(val sessionId: Long) : TileAction
+
+    /** Reprendre l'activité de la dernière session. */
+    data class Resume(val activityId: String) : TileAction
+
+    /** Rien à reprendre : ouvrir l'application pour choisir. */
+    data object OpenApp : TileAction
+}
+
+/** Contenu de la tuile, calculé sans dépendance Android (testable). */
+data class TileModel(
+    val label: String,
+    val subtitle: String,
+    val active: Boolean,
+    val description: String,
+    val action: TileAction,
+) {
+    companion object {
+        const val APP_NAME = "Mon Temps"
+
+        fun from(state: SurfaceState): TileModel {
+            val active = state.active
+            if (active != null) {
+                val name = state.activeActivity?.name ?: active.activityId
+                return TileModel(
+                    label = name,
+                    subtitle = "Depuis ${state.startLabel}",
+                    active = true,
+                    description = "$APP_NAME : $name en cours depuis ${state.startLabel}. Toucher pour arrêter le suivi.",
+                    action = TileAction.Stop(active.id),
+                )
+            }
+            val last = state.lastActivity
+            return if (last != null) {
+                TileModel(
+                    label = APP_NAME,
+                    subtitle = "Reprendre ${last.name}",
+                    active = false,
+                    description = "$APP_NAME : aucun suivi. Toucher pour reprendre ${last.name}.",
+                    action = TileAction.Resume(last.id),
+                )
+            } else {
+                TileModel(
+                    label = APP_NAME,
+                    subtitle = "Aucun suivi",
+                    active = false,
+                    description = "$APP_NAME : aucun suivi. Toucher pour ouvrir l'application.",
+                    action = TileAction.OpenApp,
+                )
+            }
+        }
+    }
+}

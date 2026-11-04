@@ -2,7 +2,9 @@
 
 Durée : ≈ 45 min, plus une nuit pour le test long. Noter pour chaque étape : OK / KO + remarque.
 Avant de commencer : installer l'APK, ouvrir l'app, aller dans Réglages et faire une sauvegarde JSON
-si des données existent déjà.
+si des données existent déjà. Vérifier aussi, dans Paramètres → Applications → Mon Temps, que le
+**démarrage automatique** est autorisé (HyperOS peut sinon bloquer le retour de la notification après
+un redémarrage, le rafraîchissement de minuit et le rappel).
 
 ## 1. Parcours de base
 1. Ouvrir l'app → « Aucune activité en cours » s'affiche.
@@ -81,6 +83,32 @@ si des données existent déjà.
 3. Reculer manuellement l'heure de 10 min : un avertissement « L'heure du téléphone a changé » apparaît.
 4. Remettre l'heure automatique.
 
-## 12. Affichage
+## 12. Widgets d'écran d'accueil
+1. Réglages → Écran d'accueil → « Widget Suivi en cours » : noter si HyperOS propose l'ajout direct
+   (sinon : appui long sur l'écran d'accueil → Widgets → Mon Temps). Idem pour « Widget Activités ».
+2. Démarrer Travail depuis l'app : les deux widgets se mettent à jour (nom, chronomètre qui avance,
+   Travail en négatif dans « Activités »).
+3. Toucher « Pause » dans le widget « Activités » : un seul appui suffit ; app, notification et
+   widgets passent sur Pause.
+4. Toucher « Arrêter » dans un widget : le suivi s'arrête partout.
+5. Redimensionner « Suivi en cours » : en petit, nom et chronomètre seulement ; en grand, la ligne
+   « Depuis… · aujourd'hui… » et les favorites apparaissent. Agrandir « Activités » : plus d'activités.
+6. Thème sombre du système : les widgets suivent.
+7. Redémarrer pendant un suivi : après déverrouillage, le chronomètre du widget est juste.
+
+## 13. Tuile du centre de contrôle
+1. Réglages → Écran d'accueil → « Tuile du centre de contrôle » (sinon : centre de contrôle → Modifier
+   → Mon Temps). Noter si la tuile est disponible et comment HyperOS affiche son libellé.
+2. Suivi en cours : la tuile est active et affiche l'activité ; un appui arrête le suivi.
+3. Sans suivi : la tuile propose « Reprendre … » ; un appui reprend la dernière activité.
+
+## 14. Rappel de session longue
+1. Réglages → Suivi → « Session longue » : choisir 4 h. Démarrer une activité et la laisser tourner.
+2. Après environ 4 h (l'alarme peut être un peu retardée) : notification « « … » toujours en cours ? »
+   avec « Continuer » et « Corriger ». Un seul rappel pour cette session.
+3. « Continuer » : la notification disparaît ; à la réouverture, aucune question pour cette session.
+4. Remettre le seuil souhaité (10 h par défaut). Le rappel peut être désactivé dans Réglages → Suivi.
+
+## 15. Affichage
 - Thème sombre du système → l'app suit.
 - Taille de police maximale (Paramètres → Affichage) → textes lisibles, raccourcis sur une colonne.

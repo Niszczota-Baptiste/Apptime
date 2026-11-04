@@ -84,8 +84,8 @@ raccourcis mais conserve ses sessions, visibles dans l'historique avec la mentio
 | App en arrière-plan | Rien ne tourne. La notification (chronomètre natif) avance seule. L'écran se met à jour au retour. |
 | Processus détruit par Android | Aucune perte : la session active est en base. Au prochain lancement (app, action de notification, démarrage), la notification est resynchronisée. La notification déjà affichée reste en place et son chronomètre continue. |
 | App retirée des récentes | Équivalent à une destruction de processus sur Android standard : la notification et la session restent. Certaines surcouches peuvent aussi retirer la notification ; la session, elle, est intacte. |
-| Redémarrage du téléphone | `BOOT_COMPLETED` → republication de la notification depuis la base (si autorisée). À la réouverture, l'app signale la session (« le téléphone a redémarré depuis ») et propose Continuer / Corriger l'heure de fin. |
-| Arrêt forcé (Paramètres → Forcer l'arrêt) | Android retire les notifications et **bloque les diffusions** (y compris `BOOT_COMPLETED`) jusqu'à la prochaine ouverture manuelle. La session reste en base ; elle réapparaît à l'ouverture, avec la même proposition de correction si elle semble oubliée. |
+| Redémarrage du téléphone | `BOOT_COMPLETED` → republication de la notification, mise à jour des widgets (base du chronomètre recalculée) et reprogrammation des alarmes depuis la base. À la réouverture, l'app signale la session (« le téléphone a redémarré depuis ») et propose Continuer / Corriger l'heure de fin. Sur HyperOS, ceci suppose que le « Démarrage automatique » de l'app soit autorisé. |
+| Arrêt forcé (Paramètres → Forcer l'arrêt) | Android retire les notifications, **annule les alarmes** et **bloque les diffusions** (y compris `BOOT_COMPLETED`) jusqu'à la prochaine ouverture manuelle. Les widgets restent affichés avec leur dernier état. La session reste en base ; tout est réaligné à l'ouverture, avec la même proposition de correction si elle semble oubliée. |
 | Changement de fuseau | Durées inchangées (instants UTC). Les heures affichées et le découpage des jours suivent le nouveau fuseau ; `TIMEZONE_CHANGED` met à jour le texte « En cours depuis … » de la notification. |
 | Correction de l'heure système | Durées calculées sur la nouvelle heure ; avertissement si l'écart avec l'horloge monotone dépasse 2 min. Si l'heure recule avant la dernière transition, les changements sont refusés tant que l'heure n'est pas cohérente (la session en cours peut être supprimée, ou corrigée après coup). |
 | Session à cheval sur minuit | Un seul enregistrement ; les bilans répartissent la durée entre les jours. L'historique l'affiche sur chaque jour concerné (« Dont X ce jour »). |
@@ -129,14 +129,50 @@ et ne la republie pas pour cette session ; elle réapparaît au changement d'act
   ligne même avec une très grande taille de texte ; les raccourcis passent alors sur une colonne.
 - La zone « en cours » a la même hauteur avec ou sans activité : les raccourcis ne se déplacent
   jamais sous le doigt.
-- « Icônes des activités » est une préférence d'affichage (DataStore) volontairement exclue de la
-  sauvegarde JSON (format inchangé) ; elle s'applique aussi au titre et aux actions de la notification.
+- Aucune icône ni émoji n'est affiché (choix de sobriété) : une activité se reconnaît à son nom
+  et à sa pastille de couleur. Le champ `icon` reste dans le modèle et les sauvegardes, inutilisé.
+
+## Surfaces hors de l'application
+
+Toutes lisent la base et passent par la même logique métier ; aucune n'a d'état propre.
+`AppContainer.refreshOutputs()` les réaligne ensemble après chaque écriture (via `ChangeListener`),
+au démarrage du processus, au redémarrage du téléphone, lors d'un changement d'heure ou de fuseau,
+et juste après minuit.
+
+| Surface | Contenu | Actions |
+|---------|---------|---------|
+| Notification de suivi | Activité, chronomètre natif, « En cours depuis » | Favorites, Arrêter, ouvrir |
+| Widget « Suivi en cours » (`TrackingWidgetProvider`) | Activité, chronomètre natif, « Depuis… · aujourd'hui » (total animé), favorites | Arrêter, favorites, ouvrir |
+| Widget « Activités » (`ActivitiesWidgetProvider`) | Toutes les activités (autant que la taille permet), l'active en négatif | Changer d'un appui, Arrêter |
+| Tuile « Mon Temps » (`TrackingTileService`) | Activité en cours, ou « Reprendre … » | Arrêter / reprendre la dernière activité |
+| Rappel de session longue | « Travail » toujours en cours ? | Continuer / Corriger (ouvre l'app) |
+
+- **Widgets** : RemoteViews classiques, sans bibliothèque. `updatePeriodMillis = 0` : aucune mise à
+  jour périodique. Les `Chronometer` sont animés par le lanceur ; leur base est en temps monotone
+  (`elapsedRealtime`), recalculée au redémarrage et aux changements d'heure. La mise en page s'adapte
+  à la taille réelle (ligne d'infos dès 110 dp, favorites dès 170 dp ; widget « Activités » : autant
+  de rangées que la hauteur le permet, dans l'ordre des raccourcis). Couleurs et fonds sont des
+  ressources : clair/sombre résolus par le lanceur.
+- **Tuile** : liée uniquement par le système (`BIND_QUICK_SETTINGS_TILE`). Un appui arrête la
+  session affichée (et seulement elle) ; sans suivi, reprend l'activité de la dernière session, ou
+  ouvre l'app s'il n'y en a pas.
+- **Actions** : PendingIntent explicites et immuables (`TrackingIntents`) vers `TrackingActionReceiver`,
+  non exporté ; la source (`notification`, `widget`, `tile`) est enregistrée sur la session.
+- **Alarmes** : uniquement inexactes (`AlarmManager.set`, `RTC`, sans réveil forcé ni permission
+  « alarmes exactes ») : rafraîchissement juste après minuit (libellés « hier », total du jour) tant
+  qu'un suivi ou un widget existe, et échéance du rappel. Elles peuvent être retardées de quelques
+  minutes ; elles sont reprogrammées au redémarrage.
+- **Rappel** : programmé au début de chaque session pour début + seuil ; annulé si la session
+  change, s'arrête, ou si l'utilisateur répond « Continuer » (qui supprime aussi la question à la
+  réouverture). Une seule notification par session. Si l'échéance est déjà passée (téléphone éteint),
+  pas de rappel tardif : l'app pose la question à la réouverture.
 
 ## Sauvegarde
 
 - **CSV** : `;` + BOM UTF-8 (Excel/LibreOffice en français), heures locales et UTC, durée en
   secondes et hh:mm:ss, note échappée.
-- **JSON** : `format = "mon-temps-backup"`, `formatVersion = 1`, activités, sessions, préférences.
+- **JSON** : `format = "mon-temps-backup"`, `formatVersion = 2` (v2 ajoute
+  `preferences.longSessionReminder` ; les fichiers v1 restent lisibles), activités, sessions, préférences.
 - **Restauration** : décodage et validation complète *avant* toute écriture (format, version,
   identifiants, références, dates, fuseaux, chevauchements, au plus une session active, pas de
   futur), puis confirmation, puis remplacement dans **une seule transaction**. Un fichier invalide

@@ -8,4 +8,21 @@
     <string name="notification_running_since">En cours depuis %1$s</string>
     <string name="notification_public_title">Suivi en cours</string>
     <string name="action_stop_tracking">Arrêter</string>
+
+    <string name="reminder_channel_name">Rappels</string>
+    <string name="reminder_channel_description">Session de suivi anormalement longue (peut-être oubliée).</string>
+    <string name="reminder_title">« %1$s » toujours en cours ?</string>
+    <string name="reminder_public_title">Session toujours en cours ?</string>
+    <string name="reminder_text">En cours depuis %1$s · %2$s</string>
+    <string name="reminder_action_continue">Continuer</string>
+    <string name="reminder_action_fix">Corriger</string>
+
+    <string name="widget_tracking_label">Suivi en cours</string>
+    <string name="widget_tracking_description">Activité en cours, chronomètre, arrêt et favorites.</string>
+    <string name="widget_activities_label">Activités</string>
+    <string name="widget_activities_description">Changer d\'activité d\'un appui.</string>
+    <string name="widget_idle_title">Aucune activité en cours</string>
+    <string name="widget_idle_time">0:00</string>
+    <string name="widget_stop">Arrêter</string>
+    <string name="tile_label">Mon Temps</string>
 </resources>

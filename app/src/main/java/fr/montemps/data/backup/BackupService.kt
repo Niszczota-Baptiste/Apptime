@@ -38,6 +38,7 @@ class BackupService(
                         notificationEnabled = p.notificationEnabled,
                         hideNameOnLockScreen = p.hideNameOnLockScreen,
                         forgottenThresholdHours = p.forgottenThresholdHours,
+                        longSessionReminder = p.longSessionReminder,
                     ),
                 )
             }
@@ -58,7 +59,7 @@ class BackupService(
             store.transaction { store.replaceAll(snapshot.activities, snapshot.sessions) }
         }
         val p = snapshot.preferences
-        prefs.restore(p.favoriteIds, p.notificationEnabled, p.hideNameOnLockScreen, p.forgottenThresholdHours)
+        prefs.restore(p.favoriteIds, p.notificationEnabled, p.hideNameOnLockScreen, p.forgottenThresholdHours, p.longSessionReminder)
         listener.onDataChanged()
     }
 }

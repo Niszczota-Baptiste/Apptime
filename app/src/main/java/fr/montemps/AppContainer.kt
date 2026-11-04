@@ -16,8 +16,12 @@ import fr.montemps.domain.SessionEditor
 import fr.montemps.domain.TimeTracker
 import fr.montemps.domain.WriteLock
 import fr.montemps.domain.time.TimeSource
+import fr.montemps.notification.AlarmScheduler
 import fr.montemps.notification.NotificationController
+import fr.montemps.notification.ReminderController
 import fr.montemps.notification.TrackingNotifier
+import fr.montemps.surfaces.SurfaceStateLoader
+import fr.montemps.surfaces.SurfacesController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -50,9 +54,22 @@ class AppContainer(
     val preferences = PreferencesRepository(dataStore)
     val notifier = TrackingNotifier(context)
     val notifications = NotificationController(store, preferences, notifier, time)
+    private val alarms = AlarmScheduler(context)
+    val reminders = ReminderController(context, store, preferences, notifier, time, alarms)
+    val surfaces = SurfacesController(context, SurfaceStateLoader(store, preferences, time), alarms, time)
 
     private val lock = WriteLock()
-    private val onChange = ChangeListener { notifications.sync() }
+    private val onChange = ChangeListener { refreshOutputs() }
+
+    /**
+     * Réaligne tout ce qui est affiché hors de l'app (notification de suivi, rappel, widgets,
+     * tuile, alarmes) sur la base. Appelé après chaque écriture et lors des événements système.
+     */
+    suspend fun refreshOutputs() {
+        notifications.sync()
+        reminders.reschedule()
+        surfaces.refresh()
+    }
 
     val tracker = TimeTracker(store, time, lock, onChange)
     val editor = SessionEditor(store, time, lock, onChange)

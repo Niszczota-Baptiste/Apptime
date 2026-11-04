@@ -198,7 +198,6 @@ private fun ActivityEditDialog(
 ) {
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     var color by remember { mutableStateOf(initial?.color ?: DefaultActivities.palette.first()) }
-    var icon by remember { mutableStateOf(initial?.icon) }
     val scheme = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -238,32 +237,12 @@ private fun ActivityEditDialog(
                         }
                     }
                 }
-                FieldLabel("Icône (facultative)")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DefaultActivities.iconChoices.forEach { e ->
-                        val isSelected = e == icon
-                        Box(
-                            Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(if (isSelected) scheme.surfaceContainerHighest else Color.Transparent)
-                                .clickable { icon = if (isSelected) null else e }
-                                .semantics { selected = isSelected },
-                            contentAlignment = Alignment.Center,
-                        ) { Text(e, style = MaterialTheme.typography.titleMedium) }
-                    }
-                }
-                Text(
-                    "Les icônes s'affichent si l'option « Icônes des activités » est activée dans les réglages.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                )
                 if (onArchive != null) {
                     TextButton(onClick = onArchive) { Text("Archiver cette activité") }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name, color, icon) }, enabled = name.isNotBlank()) { Text("Enregistrer") } },
+        confirmButton = { TextButton(onClick = { onSave(name, color, initial?.icon) }, enabled = name.isNotBlank()) { Text("Enregistrer") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }

@@ -18,16 +18,16 @@ object DefaultActivities {
     const val OTHER = "other"
 
     val all: List<TrackedActivity> = listOf(
-        TrackedActivity(WORK, "Travail", 0xFF4A78E0.toInt(), "💼", 0, false),
-        TrackedActivity(DRIVING, "Conduite", 0xFF8D6E63.toInt(), "🚗", 1, false),
-        TrackedActivity(BREAK, "Pause", 0xFFE3A33B.toInt(), "☕", 2, false),
-        TrackedActivity(MEAL, "Repas", 0xFFE07A5F.toInt(), "🍽️", 3, false),
-        TrackedActivity(KOREAN, "Coréen", 0xFF8E7CC3.toInt(), "한", 4, false),
-        TrackedActivity(SPORT, "Sport", 0xFF3FA36B.toInt(), "🏃", 5, false),
-        TrackedActivity(WRITING, "Écriture", 0xFF2A9D8F.toInt(), "✍️", 6, false),
-        TrackedActivity(MUSIC, "Musique", 0xFFD1678E.toInt(), "🎵", 7, false),
-        TrackedActivity(FREE_TIME, "Temps libre", 0xFF8AB17D.toInt(), "🌿", 8, false),
-        TrackedActivity(OTHER, "Autre", 0xFF9A9AA0.toInt(), "•", 9, false),
+        TrackedActivity(WORK, "Travail", 0xFF4A78E0.toInt(), null, 0, false),
+        TrackedActivity(DRIVING, "Conduite", 0xFF8D6E63.toInt(), null, 1, false),
+        TrackedActivity(BREAK, "Pause", 0xFFE3A33B.toInt(), null, 2, false),
+        TrackedActivity(MEAL, "Repas", 0xFFE07A5F.toInt(), null, 3, false),
+        TrackedActivity(KOREAN, "Coréen", 0xFF8E7CC3.toInt(), null, 4, false),
+        TrackedActivity(SPORT, "Sport", 0xFF3FA36B.toInt(), null, 5, false),
+        TrackedActivity(WRITING, "Écriture", 0xFF2A9D8F.toInt(), null, 6, false),
+        TrackedActivity(MUSIC, "Musique", 0xFFD1678E.toInt(), null, 7, false),
+        TrackedActivity(FREE_TIME, "Temps libre", 0xFF8AB17D.toInt(), null, 8, false),
+        TrackedActivity(OTHER, "Autre", 0xFF9A9AA0.toInt(), null, 9, false),
     )
 
     /** Favorites par défaut pour les actions rapides de la notification. */
@@ -40,8 +40,4 @@ object DefaultActivities {
         0xFF8AB17D, 0xFF3FA36B, 0xFF2A9D8F, 0xFF4FA8C2, 0xFF8D6E63, 0xFF607D8B, 0xFF9A9AA0,
     ).map { it.toInt() }
 
-    val iconChoices: List<String> = listOf(
-        "💼", "🚗", "☕", "🍽️", "한", "🏃", "✍️", "🎵", "🌿", "•", "📚", "🧘", "🛒", "🏠",
-        "💻", "📞", "🎮", "😴", "🚶", "🧹", "🎨", "🎸", "🚌", "❤️",
-    )
 }

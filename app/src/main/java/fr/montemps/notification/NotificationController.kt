@@ -4,13 +4,13 @@ import fr.montemps.data.prefs.PreferencesRepository
 import fr.montemps.domain.TrackingStore
 import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.time.TimeSource
-import fr.montemps.domain.model.TrackedActivity
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Aligne la notification sur l'état réellement enregistré. Appelé après chaque écriture, au
- * démarrage du processus, au redémarrage du téléphone et lors des changements d'heure/fuseau.
+ * Aligne la notification de suivi sur l'état réellement enregistré. Appelé (via
+ * `AppContainer.refreshOutputs`) après chaque écriture, au démarrage du processus, au redémarrage
+ * du téléphone, à minuit et lors des changements d'heure ou de fuseau.
  *
  * Règles :
  * - aucune session active, réglage désactivé ou permission absente → pas de notification ;
@@ -44,12 +44,11 @@ class NotificationController(
             .filter { it != active.activityId }
             .mapNotNull { store.activity(it) }
             .filter { !it.archived }
-            .map { FavoriteAction(it.id, it.label(p.showIcons)) }
+            .map { FavoriteAction(it.id, it.name) }
         notifier.show(
             TrackingNotificationContent(
                 sessionId = active.id,
                 activityName = activity.name,
-                activityIcon = activity.icon?.takeIf { p.showIcons && it.isNotBlank() },
                 activityColor = activity.color,
                 start = active.start,
                 startLabel = Fmt.startLabel(active.start, today, zone),
@@ -58,9 +57,6 @@ class NotificationController(
             ),
         )
     }
-
-    private fun TrackedActivity.label(showIcons: Boolean): String =
-        if (showIcons) listOfNotNull(icon?.takeIf { it.isNotBlank() }, name).joinToString(" ") else name
 
     suspend fun onUserDismissed(sessionId: Long) {
         val active = store.activeSession()

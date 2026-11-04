@@ -21,13 +21,13 @@ data class AppPreferences(
     val hideNameOnLockScreen: Boolean = false,
     /** Au-delà de cette durée, une session active est signalée comme peut-être oubliée. */
     val forgottenThresholdHours: Int = 10,
+    /** Notification de rappel quand une session dépasse [forgottenThresholdHours]. */
+    val longSessionReminder: Boolean = true,
     /** Session pour laquelle l'utilisateur a déjà répondu « Continuer ». */
     val acknowledgedSessionId: Long? = null,
     /** Session dont l'utilisateur a balayé la notification : on ne la republie pas d'office. */
     val dismissedNotificationSessionId: Long? = null,
     val notificationPermissionAsked: Boolean = false,
-    /** Affichage uniquement (non sauvegardé) : émojis des activités au lieu des pastilles de couleur. */
-    val showIcons: Boolean = false,
 ) {
     companion object {
         const val MAX_FAVORITES = 2
@@ -42,10 +42,10 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val notificationEnabled = booleanPreferencesKey("notification_enabled")
         val hideName = booleanPreferencesKey("hide_name_lock_screen")
         val threshold = intPreferencesKey("forgotten_threshold_hours")
+        val reminder = booleanPreferencesKey("long_session_reminder")
         val ackSession = longPreferencesKey("ack_session_id")
         val dismissedSession = longPreferencesKey("dismissed_notification_session_id")
         val permissionAsked = booleanPreferencesKey("notification_permission_asked")
-        val showIcons = booleanPreferencesKey("show_icons")
     }
 
     val preferences: Flow<AppPreferences> = dataStore.data.map { p ->
@@ -55,10 +55,10 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             notificationEnabled = p[Keys.notificationEnabled] ?: true,
             hideNameOnLockScreen = p[Keys.hideName] ?: false,
             forgottenThresholdHours = p[Keys.threshold] ?: 10,
+            longSessionReminder = p[Keys.reminder] ?: true,
             acknowledgedSessionId = p[Keys.ackSession],
             dismissedNotificationSessionId = p[Keys.dismissedSession],
             notificationPermissionAsked = p[Keys.permissionAsked] ?: false,
-            showIcons = p[Keys.showIcons] ?: false,
         )
     }.distinctUntilChanged()
 
@@ -72,8 +72,8 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
     suspend fun setNotificationEnabled(enabled: Boolean) = dataStore.edit { it[Keys.notificationEnabled] = enabled }
     suspend fun setHideNameOnLockScreen(hide: Boolean) = dataStore.edit { it[Keys.hideName] = hide }
     suspend fun setForgottenThresholdHours(hours: Int) = dataStore.edit { it[Keys.threshold] = hours }
+    suspend fun setLongSessionReminder(enabled: Boolean) = dataStore.edit { it[Keys.reminder] = enabled }
     suspend fun acknowledgeSession(id: Long) = dataStore.edit { it[Keys.ackSession] = id }
-    suspend fun setShowIcons(show: Boolean) = dataStore.edit { it[Keys.showIcons] = show }
     suspend fun setNotificationPermissionAsked() = dataStore.edit { it[Keys.permissionAsked] = true }
 
     suspend fun setDismissedNotificationSession(id: Long?) = dataStore.edit {
@@ -81,12 +81,19 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
     }
 
     /** Préférences restaurées depuis une sauvegarde (les états transitoires sont remis à zéro). */
-    suspend fun restore(favorites: List<String>, notificationEnabled: Boolean, hideName: Boolean, thresholdHours: Int) =
+    suspend fun restore(
+        favorites: List<String>,
+        notificationEnabled: Boolean,
+        hideName: Boolean,
+        thresholdHours: Int,
+        longSessionReminder: Boolean,
+    ) =
         dataStore.edit {
             it[Keys.favorites] = favorites.distinct().take(AppPreferences.MAX_FAVORITES).joinToString(",")
             it[Keys.notificationEnabled] = notificationEnabled
             it[Keys.hideName] = hideName
             it[Keys.threshold] = thresholdHours
+            it[Keys.reminder] = longSessionReminder
             it.remove(Keys.ackSession)
             it.remove(Keys.dismissedSession)
         }

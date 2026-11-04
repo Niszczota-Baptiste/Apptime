@@ -4,23 +4,20 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import fr.montemps.MainActivity
 import fr.montemps.R
+import fr.montemps.domain.model.CommandSource
 import java.time.Instant
 
 /** Contenu de la notification de suivi, calculé par [NotificationController]. */
 data class TrackingNotificationContent(
     val sessionId: Long,
     val activityName: String,
-    val activityIcon: String?,
     val activityColor: Int,
     val start: Instant,
     /** « 09:15 », « hier 23:10 »… */
@@ -31,99 +28,144 @@ data class TrackingNotificationContent(
 
 data class FavoriteAction(val activityId: String, val label: String)
 
+/** Rappel « session longue » (session peut-être oubliée). */
+data class ReminderContent(
+    val sessionId: Long,
+    val activityName: String,
+    val sinceLabel: String,
+    val durationLabel: String,
+    val hideNameOnLockScreen: Boolean,
+)
+
 /**
- * Construction et publication de la notification de suivi.
+ * Construction et publication des notifications.
  *
- * - Chronomètre natif (`setUsesChronometer` + `setWhen(début)`) : le système fait avancer le
- *   temps lui-même, aucune republication périodique n'est nécessaire.
- * - Canal sans son ni vibration, `setOnlyAlertOnce` et `setSilent` : les mises à jour sont muettes.
+ * Suivi en cours :
+ * - chronomètre natif (`setUsesChronometer` + `setWhen(début)`) : le système fait avancer le
+ *   temps lui-même, aucune republication périodique n'est nécessaire ;
+ * - canal sans son ni vibration, `setOnlyAlertOnce` et `setSilent` : les mises à jour sont muettes ;
  * - `setOngoing(true)` : depuis Android 14 l'utilisateur peut tout de même la balayer (sauf écran
  *   verrouillé) ; on respecte ce choix (voir [NotificationController]).
+ *
+ * Rappel de session longue : canal séparé « Rappels », publié au plus une fois par session.
  */
 class TrackingNotifier(private val context: Context) {
 
     companion object {
         const val CHANNEL_ID = "tracking"
+        const val REMINDER_CHANNEL_ID = "reminders"
         const val NOTIFICATION_ID = 1001
-        private const val RC_OPEN = 0
-        private const val RC_STOP = 10
-        private const val RC_DISMISS = 11
-        private const val RC_FAVORITE_BASE = 20
+        const val REMINDER_ID = 1002
     }
 
     private val manager = NotificationManagerCompat.from(context)
 
-    fun ensureChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            context.getString(R.string.notification_channel_name),
-            NotificationManager.IMPORTANCE_DEFAULT,
-        ).apply {
-            description = context.getString(R.string.notification_channel_description)
-            setSound(null, null)
-            enableVibration(false)
-            enableLights(false)
-            setShowBadge(false)
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    fun ensureChannels() {
+        val system = context.getSystemService(NotificationManager::class.java)
+        system.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                context.getString(R.string.notification_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = context.getString(R.string.notification_channel_description)
+                setSound(null, null)
+                enableVibration(false)
+                enableLights(false)
+                setShowBadge(false)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            },
+        )
+        system.createNotificationChannel(
+            NotificationChannel(
+                REMINDER_CHANNEL_ID,
+                context.getString(R.string.reminder_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = context.getString(R.string.reminder_channel_description)
+                setShowBadge(false)
+            },
+        )
     }
 
     fun hasPermission(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    /** Vrai si l'app peut effectivement afficher la notification (permission, app et canal autorisés). */
-    fun canPost(): Boolean {
+    /** Vrai si l'app peut effectivement afficher la notification de suivi (permission, app et canal autorisés). */
+    fun canPost(): Boolean = canPostOn(CHANNEL_ID)
+
+    private fun canPostOn(channelId: String): Boolean {
         if (!hasPermission() || !manager.areNotificationsEnabled()) return false
-        val channel = context.getSystemService(NotificationManager::class.java).getNotificationChannel(CHANNEL_ID)
+        val channel = context.getSystemService(NotificationManager::class.java).getNotificationChannel(channelId)
         return channel == null || channel.importance != NotificationManager.IMPORTANCE_NONE
     }
 
-    fun show(content: TrackingNotificationContent) {
-        if (!canPost()) return
+    fun show(content: TrackingNotificationContent) = post(CHANNEL_ID, NOTIFICATION_ID) { build(content) }
+
+    fun cancel() = manager.cancel(NOTIFICATION_ID)
+
+    fun showReminder(content: ReminderContent) = post(REMINDER_CHANNEL_ID, REMINDER_ID) { buildReminder(content) }
+
+    fun cancelReminder() = manager.cancel(REMINDER_ID)
+
+    private inline fun post(channelId: String, id: Int, notification: () -> Notification) {
+        if (!canPostOn(channelId)) return
         try {
-            manager.notify(NOTIFICATION_ID, build(content))
+            manager.notify(id, notification())
         } catch (_: SecurityException) {
             // Permission retirée entre la vérification et la publication : le suivi continue dans l'app.
         }
     }
 
-    fun cancel() = manager.cancel(NOTIFICATION_ID)
-
     fun build(content: TrackingNotificationContent): Notification {
-        val title = listOfNotNull(content.activityIcon, content.activityName).joinToString(" ")
         val text = context.getString(R.string.notification_running_since, content.startLabel)
         val builder = baseBuilder(content)
-            .setContentTitle(title)
+            .setContentTitle(content.activityName)
             .setContentText(text)
-            .setContentIntent(openAppIntent())
-            .setDeleteIntent(actionIntent(NotificationActionReceiver.ACTION_DISMISSED, RC_DISMISS) {
-                putExtra(NotificationActionReceiver.EXTRA_SESSION_ID, content.sessionId)
-            })
+            .setContentIntent(TrackingIntents.openApp(context))
+            .setDeleteIntent(TrackingIntents.dismissed(context, content.sessionId))
 
-        content.favorites.forEachIndexed { index, fav ->
-            builder.addAction(
-                0,
-                fav.label,
-                actionIntent(NotificationActionReceiver.ACTION_SWITCH, RC_FAVORITE_BASE + index) {
-                    putExtra(NotificationActionReceiver.EXTRA_ACTIVITY_ID, fav.activityId)
-                },
-            )
+        content.favorites.forEach { fav ->
+            builder.addAction(0, fav.label, TrackingIntents.switchTo(context, fav.activityId, CommandSource.Notification))
         }
         builder.addAction(
             0,
             context.getString(R.string.action_stop_tracking),
-            actionIntent(NotificationActionReceiver.ACTION_STOP, RC_STOP) {
-                putExtra(NotificationActionReceiver.EXTRA_SESSION_ID, content.sessionId)
-            },
+            TrackingIntents.stop(context, content.sessionId, CommandSource.Notification),
         )
 
         if (content.hideNameOnLockScreen) {
             // Version publique affichée sur l'écran verrouillé : sans le nom de l'activité.
             val public = baseBuilder(content)
                 .setContentTitle(context.getString(R.string.notification_public_title))
-                .setContentText(context.getString(R.string.notification_running_since, content.startLabel))
+                .setContentText(text)
+                .build()
+            builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(public)
+        } else {
+            builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        }
+        return builder.build()
+    }
+
+    fun buildReminder(content: ReminderContent): Notification {
+        val text = context.getString(R.string.reminder_text, content.sinceLabel, content.durationLabel)
+        val builder = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_tracking)
+            .setContentTitle(context.getString(R.string.reminder_title, content.activityName))
+            .setContentText(text)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setShowWhen(false)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setLocalOnly(true)
+            .setContentIntent(TrackingIntents.openApp(context))
+            .addAction(0, context.getString(R.string.reminder_action_continue), TrackingIntents.acknowledge(context, content.sessionId))
+            .addAction(0, context.getString(R.string.reminder_action_fix), TrackingIntents.openApp(context))
+        if (content.hideNameOnLockScreen) {
+            val public = NotificationCompat.Builder(context, REMINDER_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_tracking)
+                .setContentTitle(context.getString(R.string.reminder_public_title))
                 .build()
             builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(public)
         } else {
@@ -146,16 +188,4 @@ class TrackingNotifier(private val context: Context) {
             .setLocalOnly(true)
             .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-
-    private fun openAppIntent(): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        return PendingIntent.getActivity(context, RC_OPEN, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    }
-
-    private inline fun actionIntent(action: String, requestCode: Int, extras: Intent.() -> Unit): PendingIntent {
-        // Intent explicite vers un récepteur non exporté : aucune autre app ne peut déclencher ces actions.
-        val intent = Intent(context, NotificationActionReceiver::class.java).setAction(action).apply(extras)
-        return PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-    }
 }
