@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -269,15 +271,25 @@ fun PageHeader(title: String, modifier: Modifier = Modifier, actions: @Composabl
     }
 }
 
-/** Intitulé de section discret, avec valeur facultative alignée à droite. */
+/**
+ * Intitulé de section discret, avec valeur facultative alignée à droite. Le titre garde toujours
+ * sa largeur : si la valeur ou l'indication ne tient pas à côté (écran étroit, grand texte), elle
+ * passe à la ligne au lieu de couper le titre au milieu d'un mot.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SectionHeader(title: String, modifier: Modifier = Modifier, trailing: String? = null, hint: String? = null) {
-    Row(modifier.fillMaxWidth().padding(top = 28.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(
+        modifier.fillMaxWidth().padding(top = 28.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
             title,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f).semantics { heading() },
+            modifier = Modifier.padding(end = 12.dp).semantics { heading() },
         )
         if (hint != null) {
             Text(hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))

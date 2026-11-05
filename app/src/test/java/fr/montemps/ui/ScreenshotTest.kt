@@ -50,6 +50,8 @@ import java.time.ZoneId
 /**
  * Vérification visuelle : rend les vrais écrans (données réelles en base, horloge figée) et
  * enregistre des PNG dans docs/screenshots. Gabarit proche d'un écran de 6,83" (≈ 412 × 892 dp).
+ * Le Redmi Note 17 Pro 5G (1280 × 2772 px) fait entre ≈ 393 et 465 dp de large selon la densité
+ * choisie par HyperOS : le cas le plus étroit sert au test « grand texte ».
  */
 @RunWith(AndroidJUnit4::class)
 @Config(qualifiers = "w412dp-h892dp-xhdpi")
@@ -319,6 +321,7 @@ class ScreenshotTest {
     }
 
     @Test
+    @Config(qualifiers = "w393dp-h852dp-xhdpi")
     fun todayLargeFont() {
         RuntimeEnvironment.setFontScale(1.8f)
         seed()

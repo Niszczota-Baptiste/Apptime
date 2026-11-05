@@ -1,5 +1,7 @@
 # Vérifications effectuées (version 0.1.0 : interface épurée, widgets, tuile, 10 améliorations d'usage)
 
+Téléphone cible : Redmi Note 17 Pro 5G (HyperOS 3, Android 16, 6 Go de RAM) — voir
+« Changement de téléphone » plus bas.
 Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, Android SDK 36.
 **Aucun test sur appareil physique ni sur émulateur.** Les tests Android ont tourné sous Robolectric
 4.16 (framework Android 16 simulé sur la JVM).
@@ -76,7 +78,8 @@ PendingIntent (en vérifiant cible, type et immutabilité) et appellent `onRecei
 ## Vérification visuelle
 
 `ScreenshotTest` rend les vrais écrans (navigation par clics, données en base, horloge figée au
-mercredi 4 novembre 2026 15:42) sur un gabarit de 412 × 892 dp, en clair, en sombre et en texte ×1,8,
+mercredi 4 novembre 2026 15:42) sur un gabarit de 412 × 892 dp, en clair, en sombre et en texte ×1,8
+(celui-ci sur 393 × 852 dp, le cas le plus étroit du Redmi Note 17 Pro 5G),
 ainsi que les widgets (RemoteViews réellement appliquées par le gestionnaire de widgets simulé, posées
 sur un fond neutre — le reste de l'écran d'accueil n'est pas simulé). Les PNG sont dans
 `docs/screenshots/` et ont été relus :
@@ -88,7 +91,7 @@ sur un fond neutre — le reste de l'écran d'accueil n'est pas simulé). Les PN
 | `04-modifier-session`, `09-chevauchement-refuse` | Correction, refus d'un chevauchement |
 | `05-bilan-jour`, `06-bilan-semaine`, `06b-bilan-semaine-page-entiere`, `17-bilan-semaine-sombre` | Bilans |
 | `07-reglages`, `08-activites` | Réglages, gestion des activités |
-| `10-aujourdhui-grand-texte` | Taille de texte ×1,8 (une colonne, chronomètre ajusté) |
+| `10-aujourdhui-grand-texte` | Taille de texte ×1,8 sur 393 dp (une colonne, chronomètre ajusté, intitulés entiers) |
 | `11-premier-lancement` | État vide « Aucune activité en cours » |
 | `12-session-oubliee`, `13-session-oubliee-correction` | Session oubliée |
 | `14-notification`, `15-notification-rappel`, `26-notification-inactivite` | Notifications de suivi, de session longue et « rien n'est suivi » (vues construites par Android) |
@@ -106,6 +109,10 @@ reconnaissable sans la couleur (négatif + « En cours »), le chronomètre rest
 grand texte, contrastes suffisants en clair comme en sombre, les états vides sont explicites.
 Corrections faites après relecture : rangée des favorites coupée dans le widget (ligne d'infos
 regroupée, favorites affichées seulement à partir de 170 dp), texte du rappel raccourci à une ligne.
+À 393 dp en texte ×1,8 : le titre « Activités » se coupait au milieu du mot (« Activité / s ») et
+l'onglet « Aujourd'hui » était tronqué → l'indication passe sous le titre (tous les en-têtes de
+section), les libellés de la barre du bas rétrécissent légèrement au lieu d'être coupés. À taille
+normale, les captures sont identiques au pixel près avant et après la correction.
 Bug trouvé par les tests et corrigé : la comparaison de semaines comptait des sessions de la
 semaine précédente postérieures au « même moment ».
 Non capturé : le résumé du soir (style « texte long » mal rendu par le simulateur) ; son contenu est
@@ -115,12 +122,28 @@ vérifié par les tests.
 (22:10), l'heure de début étant alignée sur l'horloge simulée de Robolectric. Le rendu HyperOS réel
 (couleurs, actions visibles, écran verrouillé) n'a pas pu être vérifié.
 
+## Changement de téléphone : Redmi Note 17 Pro 5G
+
+Fiche technique relevée (page Xiaomi Inde et fiches de presse, novembre 2026) : HyperOS 3 sur
+Android 16, écran 6,83" 1280 × 2772 px (≈ 447 ppi), Snapdragon 6s Gen 4 ; modèle de l'utilisateur
+6 Go de RAM / 256 Go.
+
+| Point | Constat | Conséquence |
+|-------|---------|-------------|
+| Système | Android 16 / HyperOS 3, comme la cible précédente | Aucun changement de code : targetSdk 36, permissions, notifications, alarmes, widgets et tuile identiques |
+| Écran | 1280 px de large → entre ≈ 393 et 465 dp selon la densité choisie par HyperOS | Rendu vérifié à 393 dp (taille normale et ×1,8) : deux défauts d'affichage en très grand texte corrigés (voir plus haut) |
+| Mémoire | 6 Go : HyperOS ferme plus vite les applications en arrière-plan | Rien à changer : le suivi ne dépend pas d'un processus actif (horodatages en base, chronomètre natif, alarmes reprogrammées au démarrage). Étape « Tout effacer » ajoutée à la procédure (section 7) |
+| Pages mémoire de 16 Ko | 2 bibliothèques natives AndroidX dans l'APK (`graphics-path`, compteur DataStore) | Vérifié : segments ELF alignés sur 0x4000 et `zipalign -c -P 16` réussi → compatible si le téléphone utilise des pages de 16 Ko |
+| Haut de l'écran | HyperOS 3.1 annonce la prise en charge de l'API Live Updates d'Android 16 (« Hyper Island »), sans code propre à Xiaomi — source : presse spécialisée, pas de documentation Xiaomi officielle trouvée | Aucune adaptation : l'app utilise déjà l'API standard. Rendu à vérifier sur l'appareil (section 20) |
+| Données | Sauvegarde Android et transfert d'appareil exclus (`allowBackup=false`, `data_extraction_rules.xml`) | Changer de téléphone = « Créer une sauvegarde » puis « Restaurer une sauvegarde » (README) |
+| Processeur, stockage | Sans incidence pour une app de cette taille | — |
+
 ## Non vérifié / limites connues
 
 - Comportement réel d'HyperOS : affichage sur l'écran verrouillé, nombre d'actions visibles,
   retrait éventuel de la notification lors du balayage dans les récentes, délai de
   `BOOT_COMPLETED`, gestion de batterie agressive, réglage « Démarrage automatique » (peut bloquer le
-  redémarrage, le rafraîchissement de minuit et le rappel). → `docs/TEST_POCO.md`.
+  redémarrage, le rafraîchissement de minuit et le rappel). → `docs/TEST_TELEPHONE.md`.
 - Widgets et tuile non vérifiés sur le lanceur et le centre de contrôle d'HyperOS : prise en charge de
   l'ajout direct (`requestPinAppWidget`, `requestAddTileService`), tailles réelles des cellules,
   affichage du sous-titre de la tuile, fonctionnement des boutons de widget après un arrêt forcé.
@@ -157,7 +180,7 @@ vérifié par les tests.
 
 ## Prochaines améliorations (hors périmètre de cette version)
 
-1. Tester sur le POCO et ajuster selon les résultats de `docs/TEST_POCO.md` (sections 15 à 20 pour
+1. Tester sur le Redmi et ajuster selon les résultats de `docs/TEST_TELEPHONE.md` (sections 15 à 20 pour
    les nouveautés).
 2. Annulation après suppression dans l'historique et édition du début de la session active.
 3. Interface inter-apps protégée par permission de signature (voir `ARCHITECTURE.md`) et table `events` ;

@@ -4,7 +4,8 @@ Application Android personnelle de suivi du temps : quelle activité est en cour
 combien de temps, et comment la journée et la semaine ont été réparties. Entièrement hors
 connexion, sans compte, sans publicité ni statistiques d'usage.
 
-Cible : POCO X8 Pro Max (Android 16 / HyperOS 3). Compatible Android 8.0 (API 26) et plus.
+Cible : Redmi Note 17 Pro 5G (6 Go de RAM, Android 16 / HyperOS 3). Compatible Android 8.0
+(API 26) et plus.
 
 ## Fonctions (version 0.1.0)
 
@@ -62,6 +63,15 @@ La variante debug a l'identifiant `fr.montemps.debug` : elle peut coexister avec
 release (`fr.montemps`). Une APK debug compilée sur une autre machine est signée avec une autre clé :
 il faut alors désinstaller l'ancienne (exporter d'abord une sauvegarde JSON).
 
+### Changer de téléphone
+
+Les données ne suivent pas le transfert Android ou Xiaomi (sauvegarde Android désactivée
+volontairement). Sur l'ancien téléphone : Réglages → « Créer une sauvegarde » ; copier le fichier
+JSON sur le nouveau ; y installer l'APK puis Réglages → « Restaurer une sauvegarde ». Activités,
+historique, objectifs et réglages reviennent. À refaire sur le nouveau téléphone : autorisation de
+notification, « Démarrage automatique » (HyperOS), dossier de la sauvegarde automatique, widgets
+et tuile.
+
 ## Compilation
 
 Prérequis : JDK 17 ou plus récent, Android SDK (plateforme 36). Le wrapper Gradle télécharge Gradle 8.14.3.
@@ -109,10 +119,10 @@ app/src/main/java/fr/montemps/
 ├── AppContainer.kt         Assemblage des dépendances (sans framework d'injection)
 └── MonTempsApp.kt / MainActivity.kt
 docs/ARCHITECTURE.md        Décisions, comportement temporel, inter-apps
-docs/TEST_POCO.md           Procédure de test manuelle sur le téléphone
+docs/TEST_TELEPHONE.md      Procédure de test manuelle sur le téléphone
 ```
 
 ## Vérifications et limites
 
 Voir [`docs/VERIFICATION.md`](docs/VERIFICATION.md) : ce qui a été réellement vérifié, comment, et
-ce qui reste à valider sur l'appareil physique (aucun test n'a été fait sur un vrai POCO).
+ce qui reste à valider sur l'appareil physique (aucun test n'a été fait sur un vrai téléphone).

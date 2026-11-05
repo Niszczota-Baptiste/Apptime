@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Settings
@@ -48,6 +49,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -188,19 +190,22 @@ private fun BottomBar(current: String?, onSelect: (TopLevel) -> Unit) {
                     Modifier
                         .weight(1f)
                         .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(tl) })
-                        .padding(top = 10.dp, bottom = 8.dp),
+                        .padding(start = 3.dp, end = 3.dp, top = 10.dp, bottom = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Icon(tl.icon(), contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.height(4.dp))
+                    val labelStyle = MaterialTheme.typography.labelSmall
                     Text(
                         tl.label,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = labelStyle,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                         color = color,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        // Grand texte sur écran étroit : le libellé rétrécit un peu plutôt que d'être coupé.
+                        autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = labelStyle.fontSize, stepSize = 0.5.sp),
                     )
                 }
             }

@@ -1,10 +1,22 @@
-# Procédure de test sur le POCO X8 Pro Max (HyperOS)
+# Procédure de test sur le Redmi Note 17 Pro 5G (HyperOS 3, Android 16, 6 Go de RAM)
 
 Durée : ≈ 45 min, plus une nuit pour le test long. Noter pour chaque étape : OK / KO + remarque.
-Avant de commencer : installer l'APK, ouvrir l'app, aller dans Réglages et faire une sauvegarde JSON
-si des données existent déjà. Vérifier aussi, dans Paramètres → Applications → Mon Temps, que le
-**démarrage automatique** est autorisé (HyperOS peut sinon bloquer le retour de la notification après
-un redémarrage, le rafraîchissement de minuit et le rappel).
+Noter aussi la version exacte d'HyperOS (Paramètres → À propos du téléphone) : l'affichage en haut
+de l'écran (section 20) dépend de la version.
+
+Avant de commencer :
+- **Données d'un ancien téléphone** : le transfert Android/Xiaomi ne copie pas les données de
+  l'app (sauvegarde Android désactivée volontairement). Sur l'ancien : Réglages → « Créer une
+  sauvegarde » ; copier le fichier JSON sur le nouveau ; installer l'APK puis Réglages → « Restaurer
+  une sauvegarde ». À refaire sur le nouveau téléphone : autorisation de notification, dossier de
+  sauvegarde automatique, widgets et tuile.
+- Sinon, si des données existent déjà sur ce téléphone, faire une sauvegarde JSON.
+- Paramètres → Applications → Mon Temps : **démarrage automatique** autorisé (HyperOS peut sinon
+  bloquer le retour de la notification après un redémarrage, le rafraîchissement de minuit et les
+  rappels) ; économiseur de batterie : noter le réglage (voir section 6).
+- Avec 6 Go de RAM, HyperOS ferme plus vite les applications en arrière-plan. L'app ne dépend pas
+  d'un processus actif (horodatages en base, chronomètre natif), mais les sections 2, 6 et 7 sont
+  à suivre de près.
 
 ## 1. Parcours de base
 1. Ouvrir l'app → « Aucune activité en cours » s'affiche.
@@ -57,6 +69,11 @@ un redémarrage, le rafraîchissement de minuit et le rappel).
 2. La notification doit rester et le chronomètre continuer (noter si HyperOS la retire).
 3. Utiliser une action de la notification après le balayage : elle doit fonctionner.
 4. Rouvrir l'app : la session continue, durée correcte.
+5. Recommencer avec « Tout effacer » (croix en bas des récentes), puis ouvrir plusieurs applications
+   lourdes (appareil photo, jeux) pour saturer la mémoire. Si HyperOS retire la notification ou
+   les actions cessent de répondre : verrouiller Mon Temps dans les récentes (appui long sur la
+   carte → cadenas), régler l'économiseur de batterie sur « Pas de restriction », et refaire le test.
+   Dans tous les cas, la session ne doit pas être perdue (réouverture → durée correcte).
 
 ## 8. Arrêt forcé puis réouverture
 1. Démarrer Musique. Paramètres → Applications → Mon Temps → **Forcer l'arrêt**.
@@ -137,11 +154,16 @@ un redémarrage, le rafraîchissement de minuit et le rappel).
 2. Activer le résumé du soir à une heure proche : notification silencieuse ; un appui ouvre les bilans.
 
 ## 20. Haut de l'écran (Android 16) et sauvegarde automatique
-1. Pendant un suivi, vérifier si HyperOS affiche le chronomètre en haut de l'écran (puce / île).
-   Sinon : Réglages → « Live Updates désactivés dans Android » le cas échéant. Noter le rendu exact.
+1. Pendant un suivi, vérifier si HyperOS affiche le chronomètre en haut de l'écran (puce de la
+   barre d'état ou « Hyper Island » : HyperOS 3.1 annonce la prise en charge de l'API Live Updates
+   d'Android 16, sans code propre à Xiaomi). Sinon : Réglages → « Live Updates désactivés dans
+   Android » le cas échéant. Noter la version d'HyperOS et le rendu exact (texte, chronomètre, appui).
 2. Réglages → Sauvegarde automatique → choisir un dossier : un fichier `mon-temps-auto-…json` y
    apparaît aussitôt. Vérifier qu'il se restaure (Réglages → Restaurer une sauvegarde).
 
 ## 21. Affichage
 - Thème sombre du système → l'app suit.
-- Taille de police maximale (Paramètres → Affichage) → textes lisibles, raccourcis sur une colonne.
+- Taille de police maximale (Paramètres → Affichage) → textes lisibles, raccourcis sur une colonne,
+  intitulés entiers (« Activités », onglets de la barre du bas).
+- Facultatif : noter la « Plus petite largeur » (Options pour les développeurs). L'interface a été
+  vérifiée à 393 et 412 dp ; une valeur plus faible (taille d'affichage agrandie) est à signaler.

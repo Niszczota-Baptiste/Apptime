@@ -223,6 +223,9 @@ et juste après minuit.
   ne modifie rien.
 - Sélecteur de documents Android (SAF) : aucune permission de stockage. Sauvegarde cloud
   automatique Android désactivée (`allowBackup=false`) : l'utilisateur garde la maîtrise.
+  Le transfert d'appareil à appareil (Android ou outil Xiaomi) est lui aussi exclu
+  (`data_extraction_rules.xml`) : pour changer de téléphone, « Créer une sauvegarde » sur l'ancien
+  puis « Restaurer une sauvegarde » sur le nouveau.
 - **Sauvegarde automatique** (facultative) : un dossier choisi une fois (`OpenDocumentTree`,
   permission persistante limitée à ce dossier), une copie JSON complète tous les 7 jours
   (`mon-temps-auto-AAAA-MM-JJ.json`), les 8 plus récentes conservées. En cas d'échec (dossier
