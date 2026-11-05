@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- Application Connect IQ « Mon Temps » : compagnon de l'app Android (voir docs/GARMIN.md).
+     L'identifiant doit rester celui de fr.montemps.garmin.WatchProtocol.APP_ID. -->
+<iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
+    <iq:application id="b01f1cbd-213b-4906-be10-3dd0691bb529" type="watch-app" name="@Strings.AppName"
+        entry="MonTempsApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.2.0">
+        <iq:products>
+            <iq:product id="fr965"/>
+        </iq:products>
+        <iq:permissions>
+            <!-- Échanges avec le téléphone (via Garmin Connect). -->
+            <iq:uses-permission id="Communications"/>
+            <!-- Mise à jour de l'aperçu quand le téléphone envoie un nouvel état, app fermée. -->
+            <iq:uses-permission id="Background"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>fre</iq:language>
+        </iq:languages>
+        <iq:barrels/>
+    </iq:application>
+</iq:manifest>

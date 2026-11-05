@@ -6,6 +6,8 @@ import android.content.Intent
 import android.net.Uri
 import fr.montemps.MainActivity
 import fr.montemps.domain.model.CommandSource
+import fr.montemps.domain.watch.WatchCommand
+import java.time.Instant
 
 /**
  * PendingIntent partagées par la notification, les widgets, la tuile et les rappels.
@@ -54,6 +56,41 @@ object TrackingIntents {
 
     fun autoBackup(context: Context): PendingIntent =
         broadcast(context, TrackingActionReceiver.ACTION_AUTO_BACKUP, "backup") { }
+
+    /**
+     * Commande de la montre, envoyée depuis notre propre processus (diffusion explicite vers le
+     * récepteur non exporté) : même chemin que les actions de la notification.
+     */
+    fun watchCommand(context: Context, command: WatchCommand): Intent {
+        val intent = Intent(context, TrackingActionReceiver::class.java).setAction(TrackingActionReceiver.ACTION_WATCH)
+        val (name, at) = when (command) {
+            WatchCommand.Status -> "status" to null
+            WatchCommand.Expired -> "expired" to null
+            is WatchCommand.Switch -> {
+                intent.putExtra(TrackingActionReceiver.EXTRA_ACTIVITY_ID, command.activityId)
+                "switch" to command.at
+            }
+            is WatchCommand.Stop -> "stop" to command.at
+            is WatchCommand.Resume -> "resume" to command.at
+        }
+        intent.putExtra(TrackingActionReceiver.EXTRA_WATCH_COMMAND, name)
+        at?.let { intent.putExtra(TrackingActionReceiver.EXTRA_AT, it.toEpochMilli()) }
+        return intent
+    }
+
+    /** Inverse de [watchCommand] ; null si l'intention est incomplète. */
+    fun watchCommandOf(intent: Intent): WatchCommand? {
+        val at = intent.getLongExtra(TrackingActionReceiver.EXTRA_AT, Long.MIN_VALUE)
+            .takeIf { it != Long.MIN_VALUE }?.let(Instant::ofEpochMilli)
+        return when (intent.getStringExtra(TrackingActionReceiver.EXTRA_WATCH_COMMAND)) {
+            "status" -> WatchCommand.Status
+            "expired" -> WatchCommand.Expired
+            "switch" -> intent.getStringExtra(TrackingActionReceiver.EXTRA_ACTIVITY_ID)?.let { WatchCommand.Switch(it, at) }
+            "stop" -> WatchCommand.Stop(at)
+            "resume" -> WatchCommand.Resume(at)
+            else -> null
+        }
+    }
 
     const val DESTINATION_REPORTS = "reports"
 

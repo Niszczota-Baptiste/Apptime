@@ -33,6 +33,10 @@ Cible : Redmi Note 17 Pro 5G (6 Go de RAM, Android 16 / HyperOS 3). Compatible A
   **sauvegarde automatique hebdomadaire** dans un dossier choisi (8 copies conservées).
 - **Session oubliée** : à la réouverture, après un seuil réglable ou un redémarrage du téléphone,
   l'app propose de continuer ou de corriger l'heure de fin. Rien n'est inventé.
+- **Montre Garmin** (Forerunner 965, [`docs/GARMIN.md`](docs/GARMIN.md)) : app Connect IQ
+  « Mon Temps » (aperçu, chronomètre, changer / reprendre / arrêter au poignet, file hors ligne
+  appliquée à l'heure d'origine), rappels au poignet via Garmin Connect, import des séances de la
+  montre (Health Connect, lecture seule, après votre choix).
 
 ## Interface
 
@@ -79,7 +83,7 @@ Prérequis : JDK 17 ou plus récent, Android SDK (plateforme 36). Le wrapper Gra
 ```bash
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties   # ou variable ANDROID_HOME
 ./gradlew :app:assembleDebug          # APK : app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (96 tests, régénère les captures)
+./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (119 tests, régénère les captures)
 ./gradlew :app:lintDebug              # analyse Android Lint
 ./gradlew :app:assembleRelease        # APK release minifiée (non signée : configurer un keystore)
 ```
@@ -111,14 +115,18 @@ app/src/main/java/fr/montemps/
 │   ├── SessionValidator.kt Règles de validation (chevauchements, bornes)
 │   ├── ActivityCatalog.kt  Gestion des activités
 │   ├── TrackingStore.kt    Port de persistance
+│   ├── watch/ workouts/    Commandes de la montre ; propositions d'import des séances
 │   └── report/             Calcul des bilans, formatage français
-├── data/                   Room (base, DAO, triggers d'intégrité), DataStore, sauvegarde CSV/JSON
+├── data/                   Room (base, DAO, triggers d'intégrité), DataStore, sauvegarde CSV/JSON, Health Connect
 ├── notification/           Notifications (suivi, rappel), actions, alarmes, événements système
 ├── surfaces/               Widgets d'écran d'accueil et tuile du centre de contrôle
-├── ui/                     Compose : today, history, reports, activities, settings, components
+├── garmin/                 Liaison avec la montre (SDK Connect IQ, protocole)
+├── ui/                     Compose : today, history, reports, activities, settings, workouts, components
 ├── AppContainer.kt         Assemblage des dépendances (sans framework d'injection)
 └── MonTempsApp.kt / MainActivity.kt
+garmin/                     App montre Connect IQ (Monkey C) : manifest.xml, source/, resources/
 docs/ARCHITECTURE.md        Décisions, comportement temporel, inter-apps
+docs/GARMIN.md              Montre Garmin : installation, utilisation, protocole, limites
 docs/TEST_TELEPHONE.md      Procédure de test manuelle sur le téléphone
 ```
 

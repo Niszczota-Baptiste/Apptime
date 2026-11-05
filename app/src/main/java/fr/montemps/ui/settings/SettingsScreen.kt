@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import fr.montemps.BuildConfig
 import fr.montemps.data.prefs.AppPreferences
 import fr.montemps.domain.model.TrackedActivity
+import fr.montemps.garmin.WatchController
 import fr.montemps.ui.ScreenScaffold
 import fr.montemps.domain.report.Fmt
 import fr.montemps.ui.components.ActivityMarker
@@ -63,8 +64,10 @@ import java.time.ZoneId
 import java.util.Locale
 
 @Composable
-fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
+fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit, onImportWorkouts: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val watchEnabled by vm.watchEnabled.collectAsStateWithLifecycle()
+    val watchStatus by vm.watchStatus.collectAsStateWithLifecycle()
     val pending by vm.pendingRestore.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -173,6 +176,27 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit) {
                 HomeScreenRequests.addTile(context) { vm.message(it) }
             })
             Help("Également possible à la main : appui long sur l'écran d'accueil → Widgets → Mon Temps.")
+
+            Group("Montre Garmin")
+            SwitchRow(
+                "Relier la montre",
+                if (watchEnabled) watchStatus.label else "Activité, chronomètre et changement d'activité au poignet.",
+                watchEnabled,
+                vm::setWatchEnabled,
+            )
+            if (watchEnabled) {
+                SettingsRow("Envoyer l'état à la montre", "Si elle n'affiche pas la bonne activité.", onClick = vm::syncWatch)
+            }
+            SettingsRow("Ouvrir Garmin Connect", "Notifications au poignet, applis de la montre.", onClick = {
+                val launch = context.packageManager.getLaunchIntentForPackage(WatchController.GARMIN_CONNECT_PACKAGE)
+                if (launch != null) context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) else vm.message("Garmin Connect n'est pas installé.")
+            })
+            SettingsRow("Importer les séances sportives", "Séances de la montre, via Health Connect.", onClick = onImportWorkouts)
+            Help(
+                "L'app « Mon Temps » doit être installée sur la montre (voir le guide fourni avec le projet). " +
+                    "Rappels au poignet : Garmin Connect → Notifications et alertes → Notifications des applications → Mon Temps. " +
+                    "La notification de suivi reste sur le téléphone : la montre a son propre affichage.",
+            )
 
             Group("Suivi")
             SettingsRow("Gérer les activités", "Créer, renommer, réordonner, archiver, objectifs.", onClick = onManageActivities)

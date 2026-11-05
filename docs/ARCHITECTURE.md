@@ -15,6 +15,7 @@ domain : TimeTracker · SessionEditor · ActivityCatalog · ReportCalculator   �
    ▼
 data : RoomTrackingStore (Room) · PreferencesRepository (DataStore) · BackupService
 notification : NotificationController → TrackingNotifier ; récepteurs → TimeTracker
+surfaces / garmin : widgets, tuile, montre (sorties de refreshOutputs) ; data/health : Health Connect
 ```
 
 - **Logique centralisée.** L'écran « Aujourd'hui », les actions de notification et (plus tard)
@@ -231,6 +232,37 @@ et juste après minuit.
   (`mon-temps-auto-AAAA-MM-JJ.json`), les 8 plus récentes conservées. En cas d'échec (dossier
   supprimé, permission retirée), nouvel essai le lendemain et message dans les réglages. Le dossier
   et l'état de la sauvegarde automatique sont propres à l'appareil (non inclus dans le JSON).
+
+## Montre Garmin et séances sportives
+
+Détails, installation et protocole : `docs/GARMIN.md`.
+
+- **App montre** (`garmin/`, Monkey C) : affiche l'état reçu du téléphone et envoie des commandes.
+  Elle n'a aucune règle métier : le téléphone fait foi. Le chronomètre est calculé sur la montre à
+  partir du début de session ; une commande donnée hors ligne garde son heure et le téléphone
+  l'applique rétroactivement (`TimeTracker.switchToAt` / `stopAt`) ou la refuse si quelque chose de
+  plus récent a été fait.
+- **Liaison Android** (`garmin/`) : `WatchController` est une sortie de plus de
+  `AppContainer.refreshOutputs()` (envoi en arrière-plan, uniquement si l'état change ; la partie
+  « horloge » est exclue de la comparaison). Les messages de la montre deviennent des
+  `WatchCommand` (`domain/watch`) remis à `TrackingActionReceiver` par `TrackingIntents`, puis
+  exécutés par `WatchCommandHandler` (source `watch`).
+- **Composant exporté — justification.** Le SDK Connect IQ déclare `IQGarminBindingService`
+  (exporté, sans permission) : c'est par lui que Garmin Connect livre les messages, y compris quand
+  Mon Temps est fermé. Le SDK vérifie la signature de l'appelant (Garmin) avant toute transmission.
+  Ce service est désactivé dans le manifeste et activé uniquement par « Relier la montre » ; son
+  état sert aussi d'interrupteur, lisible sans attente au démarrage du processus. Les diffusions du
+  SDK (non authentifiées) ne sont pas écoutées pour les commandes. Aucune permission ajoutée.
+- **Health Connect — justification de `READ_EXERCISE`.** Lecture seule des séances d'exercice des
+  30 derniers jours, demandée et exécutée uniquement depuis l'écran « Séances sportives » ; aucune
+  lecture en arrière-plan, aucune écriture. Chaque séance n'est ajoutée qu'après choix de
+  l'utilisateur, via `SessionEditor` (mêmes validations qu'une saisie manuelle, source
+  `healthconnect`). Écran d'explication exigé par Android : `HealthPermissionRationaleActivity`
+  (texte seul). La bibliothèque Health Connect ajoute aussi un service exporté,
+  `HealthDataSdkService`, utilisé par l'app Health Connect (Android 13 et moins) : il refuse tout
+  appelant dont le paquet n'est pas `com.google.android.apps.healthdata`.
+- **Notification de suivi** marquée `setLocalOnly` : elle n'est pas destinée aux montres ; les
+  rappels, eux, peuvent l'être.
 
 ## Préparation des futures applications (Coréen, Sport, Création)
 

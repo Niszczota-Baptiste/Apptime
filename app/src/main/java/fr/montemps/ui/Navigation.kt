@@ -70,6 +70,8 @@ import fr.montemps.ui.settings.SettingsScreen
 import fr.montemps.ui.settings.SettingsViewModel
 import fr.montemps.ui.today.TodayScreen
 import fr.montemps.ui.today.TodayViewModel
+import fr.montemps.ui.workouts.WorkoutImportScreen
+import fr.montemps.ui.workouts.WorkoutImportViewModel
 import java.time.Instant
 import java.time.LocalDate
 
@@ -138,10 +140,17 @@ fun MonTempsNavHost(
                 }
                 composable(TopLevel.REPORTS.route) { ReportsScreen(containerViewModel { ReportsViewModel(it) }) }
                 composable(TopLevel.SETTINGS.route) {
-                    SettingsScreen(containerViewModel { SettingsViewModel(it) }, onManageActivities = { nav.navigate("activities") })
+                    SettingsScreen(
+                        containerViewModel { SettingsViewModel(it) },
+                        onManageActivities = { nav.navigate("activities") },
+                        onImportWorkouts = { nav.navigate("workouts") },
+                    )
                 }
                 composable("activities") {
                     ActivitiesScreen(containerViewModel { ActivitiesViewModel(it) }, onBack = { nav.popBackStack() })
+                }
+                composable("workouts") {
+                    WorkoutImportScreen(containerViewModel { WorkoutImportViewModel(it) }, onBack = { nav.popBackStack() })
                 }
                 composable("session/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { e ->
                     val id = e.arguments!!.getLong("id")

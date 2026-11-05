@@ -8,8 +8,8 @@ import fr.montemps.domain.model.CommandSource
 import kotlinx.coroutines.launch
 
 /**
- * Actions venant de la notification, des widgets, de la tuile et des alarmes de l'app.
- * Non exporté : seules nos PendingIntent explicites l'atteignent. Les actions répétées sont
+ * Actions venant de la notification, des widgets, de la tuile, de la montre et des alarmes de
+ * l'app. Non exporté : seules nos intentions explicites l'atteignent. Les actions répétées sont
  * idempotentes (passer à l'activité déjà active ou arrêter une session déjà arrêtée ne fait rien).
  */
 class TrackingActionReceiver : BroadcastReceiver() {
@@ -23,9 +23,12 @@ class TrackingActionReceiver : BroadcastReceiver() {
         const val ACTION_IDLE = "fr.montemps.action.IDLE"
         const val ACTION_SUMMARY = "fr.montemps.action.SUMMARY"
         const val ACTION_AUTO_BACKUP = "fr.montemps.action.AUTO_BACKUP"
+        const val ACTION_WATCH = "fr.montemps.action.WATCH"
         const val EXTRA_ACTIVITY_ID = "activity_id"
         const val EXTRA_SESSION_ID = "session_id"
         const val EXTRA_SOURCE = "source"
+        const val EXTRA_WATCH_COMMAND = "watch_command"
+        const val EXTRA_AT = "at"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -45,10 +48,16 @@ class TrackingActionReceiver : BroadcastReceiver() {
                     ACTION_SUMMARY -> container.summary.fire()
                     // La sauvegarde due est faite par refreshOutputs() ci-dessous.
                     ACTION_REFRESH, ACTION_AUTO_BACKUP -> Unit
+                    // Commande de la montre ; la réponse (état + éventuel refus) part avec refreshOutputs().
+                    ACTION_WATCH -> TrackingIntents.watchCommandOf(intent)?.let { command ->
+                        container.watch.reply(container.watchCommands.handle(command))
+                    }
                     else -> return@launch
                 }
-                // Toujours réaligner notification, widgets, tuile et alarmes sur la base.
+                // Toujours réaligner notification, widgets, tuile, montre et alarmes sur la base.
                 if (intent.action != ACTION_DISMISSED) container.refreshOutputs()
+                // Garder le processus en vie jusqu'à la fin de l'envoi vers la montre.
+                container.watch.awaitSync()
             } finally {
                 pending?.finish()
             }

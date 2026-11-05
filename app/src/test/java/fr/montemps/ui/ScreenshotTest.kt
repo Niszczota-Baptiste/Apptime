@@ -28,7 +28,9 @@ import fr.montemps.domain.model.DefaultActivities
 import fr.montemps.domain.model.Goal
 import fr.montemps.domain.model.GoalPeriod
 import fr.montemps.notification.TrackingNotifier
+import fr.montemps.domain.workouts.Workout
 import fr.montemps.testutil.FakeTimeSource
+import fr.montemps.testutil.FakeWorkoutSource
 import fr.montemps.testutil.context
 import fr.montemps.testutil.testContainer
 import fr.montemps.testutil.useContainer
@@ -243,7 +245,7 @@ class ScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w412dp-h2400dp-xhdpi")
+    @Config(qualifiers = "w412dp-h2900dp-xhdpi")
     fun settingsFullPage() {
         seed()
         runBlocking {
@@ -253,6 +255,28 @@ class ScreenshotTest {
         launch()
         tap("Réglages")
         shot("07b-reglages-page-entiere")
+    }
+
+    @Test
+    fun garminSettingsAndWorkoutImport() {
+        seed()
+        // Séances telles que Garmin Connect les copie dans Health Connect (faux : pas de Health
+        // Connect sous Robolectric). Vélo : déjà dans l'historique (Sport du 2 nov.) ;
+        // renforcement : pendant une session de Travail.
+        (c.workouts as FakeWorkoutSource).items += listOf(
+            Workout("run", at("2026-11-03T18:05"), at("2026-11-03T18:52"), "Course à pied", "Sortie facile", "Garmin Connect"),
+            Workout("gym", at("2026-11-03T12:10"), at("2026-11-03T12:55"), "Renforcement musculaire", null, "Garmin Connect"),
+            Workout("bike", at("2026-11-02T18:30"), at("2026-11-02T19:30"), "Vélo", null, "Garmin Connect"),
+            Workout("hike", at("2026-11-01T10:00"), at("2026-11-01T11:40"), "Randonnée", null, "Garmin Connect"),
+        )
+        c.watch.setEnabled(true)
+        launch()
+        tap("Réglages")
+        // Section « Montre Garmin » au-dessus de la section suivante.
+        rule.onNode(hasText("Gérer les activités")).performScrollTo()
+        shot("27-reglages-montre-garmin")
+        tap("Importer les séances sportives")
+        shot("28-seances-sportives")
     }
 
     @Test

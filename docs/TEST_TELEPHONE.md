@@ -167,3 +167,30 @@ Avant de commencer :
   intitulés entiers (« Activités », onglets de la barre du bas).
 - Facultatif : noter la « Plus petite largeur » (Options pour les développeurs). L'interface a été
   vérifiée à 393 et 412 dp ; une valeur plus faible (taille d'affichage agrandie) est à signaler.
+
+## 22. Montre Garmin (Forerunner 965) — voir `docs/GARMIN.md`
+1. Installer l'app « Mon Temps » sur la montre (fichier `.prg` par USB, ou bêta privée). Noter la
+   méthode qui a fonctionné. L'app apparaît dans la liste des applications ; ajouter son aperçu.
+2. Téléphone : Réglages → Montre Garmin → Relier la montre. L'état doit passer à « Forerunner 965 :
+   connectée. » (sinon noter le message affiché).
+3. Démarrer Travail sur le téléphone : en quelques secondes, l'aperçu et l'app montre affichent
+   Travail, la bonne heure de début et un chronomètre juste.
+4. Sur la montre : START → choisir Pause. Vibration brève ; le téléphone (app, notification,
+   widgets) passe sur Pause. START → « Reprendre Travail » : Travail reprend.
+5. START → « Arrêter le suivi » → confirmer : le suivi s'arrête partout.
+6. Hors ligne : couper le Bluetooth du téléphone, choisir Sport sur la montre (la ligne d'état
+   indique « Hors ligne · 1 en attente »), attendre 10 min, rallumer le Bluetooth et rouvrir l'app
+   montre : Sport doit commencer à l'heure choisie sur la montre, pas à la reconnexion.
+7. Refus : hors ligne, choisir Musique sur la montre ; puis, sur le téléphone, démarrer Coréen.
+   Reconnecter : la montre affiche « Ignorée : changement plus récent sur le téléphone » et Coréen.
+8. App montre fermée, changer d'activité sur le téléphone : l'aperçu se met-il à jour seul ?
+   (sinon, il se met à jour à l'ouverture de l'app : noter le comportement).
+9. Rappels au poignet : Garmin Connect → Notifications et alertes → Notifications des applications
+   → Mon Temps. Vérifier qu'un rappel « rien n'est suivi » (section 19) vibre sur la montre, et si
+   la notification de suivi permanente apparaît ou non sur la montre (elle est marquée « réservée
+   au téléphone »).
+10. Import : faire une courte séance enregistrée sur la montre, synchroniser, puis Réglages →
+    Montre Garmin → Importer les séances sportives → Autoriser. La séance apparaît, cochée ;
+    « Importer » l'ajoute à l'historique (note « Course à pied (Garmin Connect) »). Rouvrir
+    l'écran : « Déjà dans l'historique ». Si la liste reste vide : noter si Health Connect contient
+    des séances venant de Garmin Connect.

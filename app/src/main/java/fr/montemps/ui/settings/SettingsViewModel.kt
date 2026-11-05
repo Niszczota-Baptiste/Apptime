@@ -11,6 +11,7 @@ import fr.montemps.data.backup.BackupSnapshot
 import fr.montemps.data.backup.DecodeResult
 import fr.montemps.data.backup.DocumentIo
 import fr.montemps.data.backup.SafBackupFolder
+import fr.montemps.garmin.WatchLinkStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
@@ -104,6 +105,23 @@ class SettingsViewModel(private val c: AppContainer) : ViewModel() {
 
     fun message(text: String) = viewModelScope.launch { messages.send(text) }
     fun reshowNotification() = viewModelScope.launch { c.notifications.reshow() }
+
+    /** Montre Garmin : liaison activée (service du SDK actif) et son état. */
+    val watchEnabled = MutableStateFlow(c.watch.isEnabled())
+    val watchStatus: StateFlow<WatchLinkStatus> = c.watch.status
+
+    fun setWatchEnabled(enabled: Boolean) {
+        c.watch.setEnabled(enabled)
+        watchEnabled.value = enabled
+        if (enabled) c.watch.requestSync(force = true)
+    }
+
+    fun syncWatch() = viewModelScope.launch {
+        c.watch.requestSync(force = true)
+        c.watch.awaitSync()
+        val status = c.watch.status.value
+        messages.send(if (status is WatchLinkStatus.Ready) "État envoyé à la montre." else status.label)
+    }
 
     fun exportCsv(resolver: ContentResolver, uri: Uri) = io("Export CSV enregistré.") {
         DocumentIo.write(resolver, uri, c.backup.exportCsv())

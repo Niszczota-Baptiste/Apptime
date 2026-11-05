@@ -8,3 +8,9 @@ captures/
 *.keystore
 *.jks
 dist/
+
+# Application montre (Connect IQ) : sorties de compilation et clé de développeur (secrète).
+garmin/bin/
+*.prg
+*.iq
+developer_key*

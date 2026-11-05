@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Notification de suivi (autorisation demandée à l'exécution sur Android 13+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -8,6 +9,10 @@
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <!-- Republier la notification d'une session en cours après un redémarrage du téléphone. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Import des séances sportives (ex. montre Garmin via Garmin Connect) : lecture seule des
+         séances d'exercice dans Health Connect, demandée à l'utilisateur depuis l'écran d'import. -->
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
 
     <!-- Aucune permission réseau, stockage, localisation ou service au premier plan. -->
 
@@ -87,5 +92,36 @@
                 <action android:name="android.intent.action.TIME_SET" />
             </intent-filter>
         </receiver>
+
+        <!-- Health Connect : explication de l'autorisation demandée (texte seul). Android 13 et
+             moins : action dédiée de Health Connect ; Android 14+ : alias réservé au système
+             (permission START_VIEW_PERMISSION_USAGE). -->
+        <activity
+            android:name=".ui.workouts.HealthPermissionRationaleActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".ui.workouts.HealthPermissionRationaleActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Montre Garmin : service du SDK Connect IQ auquel l'app Garmin Connect se lie pour
+             livrer les messages de la montre. Le SDK vérifie la signature de l'appelant (Garmin)
+             avant toute transmission. Désactivé tant que l'utilisateur n'a pas activé la liaison
+             (Réglages → Montre Garmin) : sinon, ni Garmin Connect ni aucune autre app ne peut s'y lier. -->
+        <service
+            android:name="com.garmin.android.connectiq.IQGarminBindingService"
+            android:enabled="false"
+            tools:ignore="ExportedService"
+            tools:replace="android:enabled" />
     </application>
 </manifest>

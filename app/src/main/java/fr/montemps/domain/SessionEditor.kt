@@ -22,7 +22,13 @@ class SessionEditor(
     private val listener: ChangeListener = ChangeListener { },
 ) {
 
-    suspend fun addPastSession(activityId: String, start: Instant, end: Instant, note: String?): EditResult {
+    suspend fun addPastSession(
+        activityId: String,
+        start: Instant,
+        end: Instant,
+        note: String?,
+        source: CommandSource = CommandSource.Manual,
+    ): EditResult {
         val result = lock.withLock {
             store.transaction {
                 validateActivity(activityId)?.let { return@transaction EditResult.Invalid(it) }
@@ -35,7 +41,7 @@ class SessionEditor(
                     end = end,
                     zoneId = time.zone().id,
                     note = note.normalized(),
-                    source = CommandSource.Manual.id,
+                    source = source.id,
                 )
                 EditResult.Saved(session.copy(id = store.insertSession(session)))
             }

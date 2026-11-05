@@ -1,7 +1,7 @@
-# Vérifications effectuées (version 0.1.0 : interface épurée, widgets, tuile, 10 améliorations d'usage)
+# Vérifications effectuées (version 0.1.0 : interface épurée, widgets, tuile, 10 améliorations d'usage, montre Garmin)
 
 Téléphone cible : Redmi Note 17 Pro 5G (HyperOS 3, Android 16, 6 Go de RAM) — voir
-« Changement de téléphone » plus bas.
+« Changement de téléphone » plus bas. Montre : Garmin Forerunner 965 — voir « Montre Garmin ».
 Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, Android SDK 36.
 **Aucun test sur appareil physique ni sur émulateur.** Les tests Android ont tourné sous Robolectric
 4.16 (framework Android 16 simulé sur la JVM).
@@ -10,11 +10,13 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 
 | Vérification | Commande | Résultat |
 |--------------|----------|----------|
-| Compilation debug | `./gradlew :app:assembleDebug` | OK : APK de 14,3 Mo, `fr.montemps.debug`, targetSdk 36 |
-| Compilation release (R8) | `./gradlew :app:assembleRelease` | OK : APK non signée de 2,0 Mo |
-| Tests unitaires + Robolectric | `./gradlew :app:testDebugUnitTest` | **96/96 réussis** |
+| Compilation debug | `./gradlew :app:assembleDebug` | OK : APK de 16,0 Mo, `fr.montemps.debug`, targetSdk 36 (SDK Connect IQ et Health Connect inclus) |
+| Compilation release (R8) | `./gradlew :app:assembleRelease` | OK : APK non signée de 2,2 Mo (règles R8 : classes du SDK Connect IQ conservées) |
+| Tests unitaires + Robolectric | `./gradlew :app:testDebugUnitTest` | **119/119 réussis** |
 | Android Lint | `./gradlew :app:lintDebug` | 0 erreur ; 1 avertissement (`localeConfig` ignoré sous API 33, sans effet) |
-| Permissions de l'APK | `aapt2 dump badging` | `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `POST_PROMOTED_NOTIFICATIONS` (permission normale des Live Updates) + permission interne générée par AndroidX. Widgets, tuile, alarmes inexactes et dossier de sauvegarde (SAF) n'en ajoutent aucune |
+| Permissions de l'APK | `aapt2 dump permissions` | `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `POST_PROMOTED_NOTIFICATIONS` (permission normale des Live Updates), `health.READ_EXERCISE` (import des séances, demandée à l'utilisateur) + permission interne générée par AndroidX. Widgets, tuile, alarmes inexactes, dossier de sauvegarde (SAF) et SDK Connect IQ n'en ajoutent aucune |
+| Manifeste fusionné | `aapt2 dump xmltree` | Service du SDK Connect IQ `IQGarminBindingService` présent avec `enabled=false` (activé seulement par « Relier la montre ») |
+| App montre (Connect IQ) | `monkeyc -f garmin/monkey.jungle -d fr965 -l 3` (compilateur officiel 9.3.0) | **Compile sans erreur au niveau de types strict** ; `.prg` de 116 Ko. Définition de la Forerunner 965 reconstituée à partir des données du SDK (le fichier officiel exige un compte Garmin) ; aucun lancement (pas de simulateur ni de montre) |
 
 ## Couverture des tests
 
@@ -69,6 +71,13 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 | Migration de la base v1 → v2 sans perte | `MigrationTest.version1DatabaseIsMigratedWithoutDataLoss` |
 | Sauvegarde v3 (objectifs, interruptions, préférences) et lecture des v1/v2 | `BackupTest.exportThenRestoreRoundTrip`, `version1BackupIsStillReadable` |
 | Permission refusée puis accordée | `NotificationTest.trackingWorksWithoutNotificationPermission` |
+| **Montre** : format des messages (commandes, heure d'origine, commandes trop anciennes, état, envoi seulement si l'état change) | `WatchProtocolTest` (5 tests) |
+| **Montre** : liaison coupée et service du SDK désactivé par défaut, activation | `WatchIntegrationTest.linkIsOffAndTheSdkServiceDisabledUntilTheUserEnablesIt` |
+| **Montre** : commande → récepteur → `TimeTracker` (source `watch`) → état renvoyé ; commande répétée sans effet | `WatchIntegrationTest.commandFromTheWatchSwitchesActivityAndRepliesWithTheNewState`, `stateIsSentWhenItChangesOnly` |
+| **Montre** : commande hors ligne appliquée à son heure ; refus si le téléphone a changé depuis ; reprise | `WatchIntegrationTest.offlineCommandIsAppliedAtItsOriginalTime`, `outdatedOfflineCommandIsRefusedWithAMessage`, `resumeAfterABreakReturnsToTheInterruptedActivity` |
+| **Montre** : vrai SDK Connect IQ sans Garmin Connect installé | `WatchIntegrationTest.realSdkReportsThatGarminConnectIsMissing` |
+| **Séances** : propositions (créneau libre, déjà importée, chevauchement, doublon entre apps, séance en cours ou trop courte), note | `WorkoutImportTest` (6 tests) |
+| **Séances** : états Health Connect, import en Sport (source `healthconnect`), activité choisie conservée | `WorkoutImportViewModelTest` (3 tests, source simulée) |
 | Redémarrage (récepteur déclaré + republication) | `NotificationTest.bootBroadcastRestoresNotificationFromDatabase` |
 
 Limite de ces tests : sous Robolectric, les diffusions explicites vers le récepteur ne sont pas
@@ -103,6 +112,8 @@ sur un fond neutre — le reste de l'écran d'accueil n'est pas simulé). Les PN
 | `06b-bilan-semaine-page-entiere` | Comparaison au même moment, moyenne, objectifs, évolution, séries, vue par jour |
 | `07b-reglages-page-entiere` | Réglages complets (Live Update, rappels, sauvegarde automatique) |
 | `25-modifier-activite` | Interruption et objectif d'une activité |
+| `27-reglages-montre-garmin` | Section « Montre Garmin » (liaison active, état de la montre simulé) |
+| `28-seances-sportives` | Import des séances : cochée, déjà dans l'historique, chevauchement (séances simulées) |
 
 Points vérifiés à la relecture : les dix raccourcis tiennent sur un écran, l'activité active est
 reconnaissable sans la couleur (négatif + « En cours »), le chronomètre reste sur une ligne en très
@@ -137,6 +148,17 @@ Android 16, écran 6,83" 1280 × 2772 px (≈ 447 ppi), Snapdragon 6s Gen 4 ; mo
 | Haut de l'écran | HyperOS 3.1 annonce la prise en charge de l'API Live Updates d'Android 16 (« Hyper Island »), sans code propre à Xiaomi — source : presse spécialisée, pas de documentation Xiaomi officielle trouvée | Aucune adaptation : l'app utilise déjà l'API standard. Rendu à vérifier sur l'appareil (section 20) |
 | Données | Sauvegarde Android et transfert d'appareil exclus (`allowBackup=false`, `data_extraction_rules.xml`) | Changer de téléphone = « Créer une sauvegarde » puis « Restaurer une sauvegarde » (README) |
 | Processeur, stockage | Sans incidence pour une app de cette taille | — |
+
+## Montre Garmin (Forerunner 965)
+
+Voir `docs/GARMIN.md`. Vérifié ici : tests Android ci-dessus, compilation stricte de l'app montre,
+manifeste fusionné. Le SDK Android (`ciq-companion-app-sdk` 2.4.0) a été inspecté : aucune
+permission, `<queries>` vers Garmin Connect, un service exporté qui vérifie la signature de
+l'appelant avant de transmettre (seule voie écoutée pour les commandes), un récepteur dynamique
+sans vérification (non utilisé pour les commandes). Non vérifié, faute de matériel : rendu et
+fonctionnement de l'app sur la montre, liaison Bluetooth réelle, réception en arrière-plan,
+installation par USB, présence des séances Garmin dans Health Connect, effet de `setLocalOnly`
+sur Garmin Connect. → `docs/TEST_TELEPHONE.md`, section 22.
 
 ## Non vérifié / limites connues
 
@@ -180,9 +202,11 @@ Android 16, écran 6,83" 1280 × 2772 px (≈ 447 ppi), Snapdragon 6s Gen 4 ; mo
 
 ## Prochaines améliorations (hors périmètre de cette version)
 
-1. Tester sur le Redmi et ajuster selon les résultats de `docs/TEST_TELEPHONE.md` (sections 15 à 20 pour
-   les nouveautés).
-2. Annulation après suppression dans l'historique et édition du début de la session active.
-3. Interface inter-apps protégée par permission de signature (voir `ARCHITECTURE.md`) et table `events` ;
+1. Tester sur le Redmi et la Forerunner 965 et ajuster selon les résultats de `docs/TEST_TELEPHONE.md`
+   (sections 15 à 20 pour les nouveautés, 22 pour la montre).
+2. Montre : « Annuler » depuis le poignet, complication pour cadran (API 4.2+), séance Garmin
+   terminée → proposition d'import immédiate (événement « activité terminée » de la montre).
+3. Annulation après suppression dans l'historique et édition du début de la session active.
+4. Interface inter-apps protégée par permission de signature (voir `ARCHITECTURE.md`) et table `events` ;
    les widgets des futures apps (Coréen, Sport, Création) pourront suivre le même modèle que `surfaces/`.
-4. Signature release avec un keystore personnel et intégration continue (build + tests).
+5. Signature release avec un keystore personnel et intégration continue (build + tests).

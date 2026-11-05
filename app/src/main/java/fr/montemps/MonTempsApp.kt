@@ -17,6 +17,9 @@ class MonTempsApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         container.notifier.ensureChannels()
+        // Montre Garmin (si la liaison est activée) : l'écouteur doit exister avant que Garmin
+        // Connect, qui a pu démarrer le processus pour livrer un message, ne le remette.
+        container.watch.start()
         // Processus recréé (après destruction par Android, mise à jour…) : la session active est
         // relue depuis la base ; notification, widgets et tuile sont réalignés. Rien n'est modifié.
         startup = container.appScope.launch { container.refreshOutputs() }

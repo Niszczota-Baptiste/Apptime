@@ -9,6 +9,12 @@ import kotlinx.coroutines.runBlocking
 import fr.montemps.data.backup.BackupFolder
 import fr.montemps.data.db.MonTempsDatabase
 import fr.montemps.domain.time.TimeSource
+import fr.montemps.domain.workouts.Workout
+import fr.montemps.domain.workouts.WorkoutAvailability
+import fr.montemps.domain.workouts.WorkoutSource
+import fr.montemps.garmin.WatchLink
+import fr.montemps.garmin.WatchLinkStatus
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,14 +61,66 @@ fun testContainer(
     time: FakeTimeSource = FakeTimeSource(),
     database: MonTempsDatabase = MonTempsDatabase.build(context(), inMemory = true),
     backupFolderFor: ((String) -> BackupFolder)? = null,
+    watchLink: WatchLink = FakeWatchLink(),
+    workouts: WorkoutSource = FakeWorkoutSource(),
 ): AppContainer {
     val file = File(context().cacheDir, "prefs-${UUID.randomUUID()}.preferences_pb")
     val dataStore = PreferenceDataStoreFactory.create(scope = CoroutineScope(Dispatchers.IO + SupervisorJob())) { file }
-    return if (backupFolderFor == null) {
-        AppContainer(context(), time, database, dataStore)
-    } else {
-        AppContainer(context(), time, database, dataStore, backupFolderFor)
+    return AppContainer(
+        context(),
+        time,
+        database,
+        dataStore,
+        backupFolderFor = backupFolderFor ?: { MemoryBackupFolder() },
+        watchLink = watchLink,
+        workouts = workouts,
+    )
+}
+
+/** Montre factice : enregistre les messages envoyés, permet de simuler ceux de la montre. */
+class FakeWatchLink : WatchLink {
+    override val status = MutableStateFlow<WatchLinkStatus>(WatchLinkStatus.Off)
+    val sent = mutableListOf<Map<String, Any?>>()
+    var connected = true
+    var started = false
+    private var onMessage: ((Any?) -> Unit)? = null
+
+    override fun start(onMessage: (Any?) -> Unit, onWatchConnected: () -> Unit) {
+        started = true
+        this.onMessage = onMessage
+        status.value = WatchLinkStatus.Ready("Forerunner 965")
     }
+
+    override fun stop() {
+        started = false
+        onMessage = null
+        status.value = WatchLinkStatus.Off
+    }
+
+    override suspend fun send(message: Map<String, Any?>): Boolean {
+        if (!connected) return false
+        sent += message
+        return true
+    }
+
+    override fun refreshStatus() = Unit
+
+    /** Message reçu de l'app montre (comme le transmettrait Garmin Connect). */
+    fun receive(message: Any?) {
+        onMessage?.invoke(message)
+    }
+}
+
+/** Source de séances factice (Health Connect n'existe pas sous Robolectric). */
+class FakeWorkoutSource(
+    var availability: WorkoutAvailability = WorkoutAvailability.AVAILABLE,
+    var granted: Boolean = true,
+    val items: MutableList<Workout> = mutableListOf(),
+) : WorkoutSource {
+    override fun availability(): WorkoutAvailability = availability
+    override suspend fun hasPermission(): Boolean = granted
+    override suspend fun workouts(from: Instant, to: Instant): List<Workout> =
+        items.filter { it.start.isBefore(to) && it.end.isAfter(from) }
 }
 
 /** Dossier de sauvegarde en mémoire (le vrai passe par le sélecteur de documents Android). */

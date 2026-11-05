@@ -89,14 +89,19 @@ sealed class CommandSource(val id: String) {
     data object Tile : CommandSource("tile")
     data object Manual : CommandSource("manual")
     data object Restore : CommandSource("restore")
+    /** Montre Garmin (application Connect IQ « Mon Temps »). */
+    data object Watch : CommandSource("watch")
+    /** Séance importée depuis Health Connect (ex. enregistrée par la montre). */
+    data object HealthImport : CommandSource("healthconnect")
     /** Future application compagnon identifiée par son nom de paquet. */
     data class External(val packageName: String) : CommandSource("external:$packageName")
 
     companion object {
-        /** Source des commandes reçues par le récepteur d'actions (notification, widget, tuile). */
+        /** Source des commandes reçues par le récepteur d'actions (notification, widget, tuile, montre). */
         fun ofSurface(id: String?): CommandSource = when (id) {
             Widget.id -> Widget
             Tile.id -> Tile
+            Watch.id -> Watch
             else -> Notification
         }
     }

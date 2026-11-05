@@ -20,6 +20,12 @@ import fr.montemps.domain.SessionEditor
 import fr.montemps.domain.TimeTracker
 import fr.montemps.domain.WriteLock
 import fr.montemps.domain.time.TimeSource
+import fr.montemps.domain.watch.WatchCommandHandler
+import fr.montemps.domain.workouts.WorkoutSource
+import fr.montemps.data.health.HealthConnectWorkouts
+import fr.montemps.garmin.ConnectIqLink
+import fr.montemps.garmin.WatchController
+import fr.montemps.garmin.WatchLink
 import fr.montemps.notification.AlarmScheduler
 import fr.montemps.notification.EveningSummaryController
 import fr.montemps.notification.IdleReminderController
@@ -57,6 +63,10 @@ class AppContainer(
     dataStore: DataStore<Preferences> = context.dataStore,
     /** Dossier de sauvegarde automatique à partir de son URI (remplaçable dans les tests). */
     backupFolderFor: (String) -> BackupFolder = { SafBackupFolder(context, it.toUri()) },
+    /** Liaison avec la montre Garmin (remplaçable dans les tests). */
+    watchLink: WatchLink = ConnectIqLink(context.applicationContext),
+    /** Séances sportives à importer (Health Connect ; remplaçable dans les tests). */
+    val workouts: WorkoutSource = HealthConnectWorkouts(context.applicationContext),
 ) {
     val appContext: Context = context.applicationContext
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -69,13 +79,14 @@ class AppContainer(
     val idle = IdleReminderController(context, store, preferences, notifier, time, alarms)
     val summary = EveningSummaryController(context, store, preferences, notifier, time, alarms)
     val surfaces = SurfacesController(context, SurfaceStateLoader(store, preferences, time), alarms, time)
+    val watch = WatchController(context.applicationContext, watchLink, SurfaceStateLoader(store, preferences, time), time, appScope)
 
     private val lock = WriteLock()
     private val onChange = ChangeListener { refreshOutputs() }
 
     /**
      * Réaligne tout ce qui est affiché hors de l'app (notification de suivi, rappel, widgets,
-     * tuile, alarmes) sur la base. Appelé après chaque écriture et lors des événements système.
+     * tuile, montre, alarmes) sur la base. Appelé après chaque écriture et lors des événements système.
      */
     suspend fun refreshOutputs() {
         notifications.sync()
@@ -83,10 +94,12 @@ class AppContainer(
         idle.reschedule()
         summary.reschedule()
         surfaces.refresh()
+        watch.requestSync() // en arrière-plan : la montre peut être lente ou absente
         autoBackup.reschedule() // en dernier : peut écrire un fichier si la sauvegarde est due
     }
 
     val tracker = TimeTracker(store, time, lock, onChange)
+    val watchCommands = WatchCommandHandler(tracker, store)
     val editor = SessionEditor(store, time, lock, onChange)
     val catalog = ActivityCatalog(store, lock, onChange)
     val backup = BackupService(store, preferences, lock, time, onChange, BuildConfig.VERSION_NAME)
