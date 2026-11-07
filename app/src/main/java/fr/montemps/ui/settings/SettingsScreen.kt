@@ -1,5 +1,18 @@
 package fr.montemps.ui.settings
 
+import fr.montemps.domain.sleep.SleepSchedule
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.draw.rotate
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Checkbox
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.foundation.layout.height
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.AnimatedVisibility
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -53,7 +66,6 @@ import fr.montemps.domain.report.Fmt
 import fr.montemps.ui.components.ActivityMarker
 import fr.montemps.ui.components.TimePickerDialogFor
 import fr.montemps.ui.components.PageHeader
-import fr.montemps.ui.components.SectionHeader
 import fr.montemps.surfaces.ActivitiesWidgetProvider
 import fr.montemps.surfaces.HomeScreenRequests
 import fr.montemps.surfaces.TrackingWidgetProvider
@@ -80,6 +92,11 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit, onImpo
     var windowStart by remember { mutableStateOf(0) }
     var pickSummaryTime by remember { mutableStateOf(false) }
     var autoBackupMenu by remember { mutableStateOf(false) }
+    var pickBedtime by remember { mutableStateOf(false) }
+    var pickWake by remember { mutableStateOf(false) }
+    var chooseDays by remember { mutableStateOf<SleepKind?>(null) }
+    // Catégories dépliées (clés séparées par des virgules), conservées en quittant l'écran.
+    var openSections by rememberSaveable { mutableStateOf("") }
     val folderLabel by vm.autoBackupFolder.collectAsStateWithLifecycle()
     var canPromote by remember { mutableStateOf(true) }
     LifecycleResumeEffect(Unit) {
@@ -114,148 +131,226 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit, onImpo
         ) {
             PageHeader("Réglages", Modifier.padding(horizontal = 20.dp))
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 20.dp))
+            Spacer(Modifier.height(8.dp))
 
-            Group("Notification")
-            SwitchRow("Notification de suivi", "Activité en cours, chronomètre et actions rapides.", s.prefs.notificationEnabled, vm::setNotificationEnabled)
-            repeat(AppPreferences.MAX_FAVORITES) { slot ->
-                val id = s.prefs.favoriteIds.getOrNull(slot)
-                SettingsRow(
-                    title = "Action rapide ${slot + 1}",
-                    value = id?.let { byId[it]?.name } ?: "Aucune",
-                    onClick = { favoriteSlot = slot },
-                )
+            val p = s.prefs
+            val toggle: (String) -> Unit = { key ->
+                val set = openSections.split(',').filter { it.isNotBlank() }.toMutableSet()
+                if (!set.add(key)) set.remove(key)
+                openSections = set.joinToString(",")
             }
-            SwitchRow(
-                "Masquer le nom sur l'écran verrouillé",
-                "N'affiche que « Suivi en cours » et la durée.",
-                s.prefs.hideNameOnLockScreen,
-                vm::setHideName,
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            val open = openSections.split(',').toSet()
+
+            Section(
+                "notification",
+                "Notification",
+                if (!p.notificationEnabled) "Désactivée" else "Activée · actions : " +
+                    (p.favoriteIds.mapNotNull { byId[it]?.name }.joinToString(", ").ifEmpty { "aucune" }),
+                open,
+                toggle,
+            ) {
+                SwitchRow("Notification de suivi", "Activité en cours, chronomètre et actions rapides.", p.notificationEnabled, vm::setNotificationEnabled)
+                repeat(AppPreferences.MAX_FAVORITES) { slot ->
+                    val id = p.favoriteIds.getOrNull(slot)
+                    SettingsRow(
+                        title = "Action rapide ${slot + 1}",
+                        value = id?.let { byId[it]?.name } ?: "Aucune",
+                        onClick = { favoriteSlot = slot },
+                    )
+                }
                 SwitchRow(
-                    "Afficher en haut de l'écran",
-                    "Live Update : chronomètre dans la barre d'état (Android 16).",
-                    s.prefs.promotedNotification,
-                    vm::setPromoted,
+                    "Masquer le nom sur l'écran verrouillé",
+                    "N'affiche que « Suivi en cours » et la durée.",
+                    p.hideNameOnLockScreen,
+                    vm::setHideName,
                 )
-                if (s.prefs.promotedNotification && !canPromote) {
-                    SettingsRow("Live Updates désactivés dans Android", "Toucher pour les autoriser.", onClick = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                    SwitchRow(
+                        "Afficher en haut de l'écran",
+                        "Live Update : chronomètre dans la barre d'état (Android 16).",
+                        p.promotedNotification,
+                        vm::setPromoted,
+                    )
+                    if (p.promotedNotification && !canPromote) {
+                        SettingsRow("Live Updates désactivés dans Android", "Toucher pour les autoriser.", onClick = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                            )
+                        })
+                    }
+                }
+                SettingsRow("Réafficher la notification", "Si vous l'avez balayée.", onClick = vm::reshowNotification)
+                SettingsRow(
+                    "Notifications Android",
+                    "Autorisation, écran verrouillé, contenu sensible.",
+                    onClick = {
                         context.startActivity(
-                            Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                                 .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
-                    })
-                }
-            }
-            SettingsRow("Réafficher la notification", "Si vous l'avez balayée.", onClick = vm::reshowNotification)
-            SettingsRow(
-                "Notifications Android",
-                "Autorisation, écran verrouillé, contenu sensible.",
-                onClick = {
-                    context.startActivity(
-                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                },
-            )
-            Help(
-                "Une favorite déjà en cours n'est pas proposée. L'affichage sur l'écran verrouillé dépend des réglages " +
-                    "d'Android et d'HyperOS ; le rendu exact varie selon l'appareil.",
-            )
-
-            Group("Écran d'accueil")
-            SettingsRow("Widget « Suivi en cours »", "Activité, chronomètre, Arrêter et favorites.", onClick = {
-                if (!HomeScreenRequests.pinWidget(context, TrackingWidgetProvider::class.java)) vm.message(HomeScreenRequests.MANUAL_WIDGET)
-            })
-            SettingsRow("Widget « Activités »", "Changer d'activité d'un appui.", onClick = {
-                if (!HomeScreenRequests.pinWidget(context, ActivitiesWidgetProvider::class.java)) vm.message(HomeScreenRequests.MANUAL_WIDGET)
-            })
-            SettingsRow("Tuile du centre de contrôle", "Arrêter ou reprendre le suivi.", onClick = {
-                HomeScreenRequests.addTile(context) { vm.message(it) }
-            })
-            Help("Également possible à la main : appui long sur l'écran d'accueil → Widgets → Mon Temps.")
-
-            Group("Montre Garmin")
-            SwitchRow(
-                "Relier la montre",
-                if (watchEnabled) watchStatus.label else "Activité, chronomètre et changement d'activité au poignet.",
-                watchEnabled,
-                vm::setWatchEnabled,
-            )
-            if (watchEnabled) {
-                SettingsRow("Envoyer l'état à la montre", "Si elle n'affiche pas la bonne activité.", onClick = vm::syncWatch)
-            }
-            SettingsRow("Ouvrir Garmin Connect", "Notifications au poignet, applis de la montre.", onClick = {
-                val launch = context.packageManager.getLaunchIntentForPackage(WatchController.GARMIN_CONNECT_PACKAGE)
-                if (launch != null) context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) else vm.message("Garmin Connect n'est pas installé.")
-            })
-            SettingsRow("Importer les séances sportives", "Séances de la montre, via Health Connect.", onClick = onImportWorkouts)
-            Help(
-                "L'app « Mon Temps » doit être installée sur la montre (voir le guide fourni avec le projet). " +
-                    "Rappels au poignet : Garmin Connect → Notifications et alertes → Notifications des applications → Mon Temps. " +
-                    "La notification de suivi reste sur le téléphone : la montre a son propre affichage.",
-            )
-
-            Group("Suivi")
-            SettingsRow("Gérer les activités", "Créer, renommer, réordonner, archiver, objectifs.", onClick = onManageActivities)
-
-            Group("Rappels")
-            SettingsRow(
-                "Session longue",
-                "Au-delà, la session est signalée comme peut-être oubliée.",
-                value = "${s.prefs.forgottenThresholdHours} h",
-                onClick = { chooseThreshold = true },
-            )
-            SwitchRow(
-                "Rappel de session longue",
-                "Une notification, une seule fois par session.",
-                s.prefs.longSessionReminder,
-                vm::setReminder,
-            )
-            SwitchRow(
-                "Rappel « rien n'est suivi »",
-                "Après ${s.prefs.idleReminderHours} h sans suivi, dans la plage horaire choisie.",
-                s.prefs.idleReminderEnabled,
-                vm::setIdle,
-            )
-            if (s.prefs.idleReminderEnabled) {
-                SettingsRow("Délai", value = "${s.prefs.idleReminderHours} h", onClick = { chooseIdleDelay = true })
-                SettingsRow(
-                    "Plage horaire",
-                    value = "${clock(s.prefs.idleWindowStartMinutes)} – ${clock(s.prefs.idleWindowEndMinutes)}",
-                    onClick = { windowStart = s.prefs.idleWindowStartMinutes; windowStep = 0 },
+                    },
+                )
+                Help(
+                    "Une favorite déjà en cours n'est pas proposée. L'affichage sur l'écran verrouillé dépend des réglages " +
+                        "d'Android et d'HyperOS ; le rendu exact varie selon l'appareil.",
                 )
             }
-            SwitchRow(
-                "Résumé du soir",
-                "Une notification silencieuse : total et objectifs du jour.",
-                s.prefs.eveningSummaryEnabled,
-                vm::setSummary,
-            )
-            if (s.prefs.eveningSummaryEnabled) {
-                SettingsRow("Heure du résumé", value = clock(s.prefs.eveningSummaryMinutes), onClick = { pickSummaryTime = true })
+
+            Section("suivi", "Activités", "Activités, sous-catégories, objectifs", open, toggle) {
+                SettingsRow(
+                    "Gérer les activités",
+                    "Créer, renommer, réordonner, archiver, objectifs et sous-catégories.",
+                    onClick = onManageActivities,
+                )
             }
 
-            Group("Données")
-            SettingsRow("Exporter les sessions", "Fichier CSV pour tableur.", enabled = !busy, onClick = {
-                csvLauncher.launch("mon-temps-sessions-$today.csv")
-            })
-            SettingsRow("Créer une sauvegarde", "Fichier JSON complet.", enabled = !busy, onClick = {
-                jsonLauncher.launch("mon-temps-sauvegarde-$today.json")
-            })
-            SettingsRow("Restaurer une sauvegarde", "Remplace toutes les données actuelles.", enabled = !busy, onClick = {
-                restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
-            })
-            SettingsRow(
-                "Sauvegarde automatique",
-                autoBackupSubtitle(s.prefs, folderLabel),
-                value = if (s.prefs.autoBackupTreeUri == null) "Désactivée" else null,
-                enabled = !busy,
-                onClick = { if (s.prefs.autoBackupTreeUri == null) treeLauncher.launch(null) else autoBackupMenu = true },
-            )
-            Help("Fichiers enregistrés où vous le choisissez. Aucun accès général au stockage, aucune connexion réseau.")
+            Section(
+                "sommeil",
+                "Sommeil",
+                sleepSummary(p),
+                open,
+                toggle,
+            ) {
+                SwitchRow(
+                    "Coucher automatique",
+                    "À ${clock(p.bedtimeMinutes)}, Sommeil démarre (l'activité en cours s'arrête).",
+                    p.bedtimeEnabled,
+                    vm::setBedtime,
+                )
+                if (p.bedtimeEnabled) {
+                    SettingsRow("Heure du coucher", value = clock(p.bedtimeMinutes), onClick = { pickBedtime = true })
+                    SettingsRow("Jours", value = SleepSchedule.daysLabel(p.bedtimeDays), onClick = { chooseDays = SleepKind.BEDTIME })
+                }
+                SwitchRow(
+                    "Réveil automatique",
+                    "À ${clock(p.wakeMinutes)}, Sommeil s'arrête s'il est en cours.",
+                    p.wakeEnabled,
+                    vm::setWake,
+                )
+                if (p.wakeEnabled) {
+                    SettingsRow("Heure du réveil", value = clock(p.wakeMinutes), onClick = { pickWake = true })
+                    SettingsRow("Jours", value = SleepSchedule.daysLabel(p.wakeDays), onClick = { chooseDays = SleepKind.WAKE })
+                }
+                Help(
+                    "Une notification silencieuse confirme chaque changement, avec « Annuler ». L'heure prévue est " +
+                        "enregistrée même si le téléphone traite l'alarme avec un peu de retard (économie d'énergie) ; " +
+                        "ce que vous faites entre-temps l'emporte toujours.",
+                )
+            }
+
+            Section("rappels", "Rappels", remindersSummary(p), open, toggle) {
+                SettingsRow(
+                    "Session longue",
+                    "Au-delà, la session est signalée comme peut-être oubliée.",
+                    value = "${p.forgottenThresholdHours} h",
+                    onClick = { chooseThreshold = true },
+                )
+                SwitchRow(
+                    "Rappel de session longue",
+                    "Une notification, une seule fois par session.",
+                    p.longSessionReminder,
+                    vm::setReminder,
+                )
+                SwitchRow(
+                    "Rappel « rien n'est suivi »",
+                    "Après ${p.idleReminderHours} h sans suivi, dans la plage horaire choisie.",
+                    p.idleReminderEnabled,
+                    vm::setIdle,
+                )
+                if (p.idleReminderEnabled) {
+                    SettingsRow("Délai", value = "${p.idleReminderHours} h", onClick = { chooseIdleDelay = true })
+                    SettingsRow(
+                        "Plage horaire",
+                        value = "${clock(p.idleWindowStartMinutes)} – ${clock(p.idleWindowEndMinutes)}",
+                        onClick = { windowStart = p.idleWindowStartMinutes; windowStep = 0 },
+                    )
+                }
+                SwitchRow(
+                    "Résumé du soir",
+                    "Une notification silencieuse : total et objectifs du jour.",
+                    p.eveningSummaryEnabled,
+                    vm::setSummary,
+                )
+                if (p.eveningSummaryEnabled) {
+                    SettingsRow("Heure du résumé", value = clock(p.eveningSummaryMinutes), onClick = { pickSummaryTime = true })
+                }
+            }
+
+            Section(
+                "accueil",
+                "Écran d'accueil",
+                "Widgets « Suivi en cours » et « Activités », tuile",
+                open,
+                toggle,
+            ) {
+                SettingsRow("Widget « Suivi en cours »", "Activité, chronomètre, Arrêter et favorites.", onClick = {
+                    if (!HomeScreenRequests.pinWidget(context, TrackingWidgetProvider::class.java)) vm.message(HomeScreenRequests.MANUAL_WIDGET)
+                })
+                SettingsRow("Widget « Activités »", "Changer d'activité d'un appui.", onClick = {
+                    if (!HomeScreenRequests.pinWidget(context, ActivitiesWidgetProvider::class.java)) vm.message(HomeScreenRequests.MANUAL_WIDGET)
+                })
+                SettingsRow("Tuile du centre de contrôle", "Arrêter ou reprendre le suivi.", onClick = {
+                    HomeScreenRequests.addTile(context) { vm.message(it) }
+                })
+                Help("Également possible à la main : appui long sur l'écran d'accueil → Widgets → Mon Temps.")
+            }
+
+            Section(
+                "montre",
+                "Montre Garmin",
+                if (watchEnabled) watchStatus.label else "Non reliée",
+                open,
+                toggle,
+            ) {
+                SwitchRow(
+                    "Relier la montre",
+                    if (watchEnabled) watchStatus.label else "Activité, chronomètre et changement d'activité au poignet.",
+                    watchEnabled,
+                    vm::setWatchEnabled,
+                )
+                if (watchEnabled) {
+                    SettingsRow("Envoyer l'état à la montre", "Si elle n'affiche pas la bonne activité.", onClick = vm::syncWatch)
+                }
+                SettingsRow("Ouvrir Garmin Connect", "Notifications au poignet, applis de la montre.", onClick = {
+                    val launch = context.packageManager.getLaunchIntentForPackage(WatchController.GARMIN_CONNECT_PACKAGE)
+                    if (launch != null) context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) else vm.message("Garmin Connect n'est pas installé.")
+                })
+                SettingsRow("Importer les séances sportives", "Séances de la montre, via Health Connect.", onClick = onImportWorkouts)
+                Help(
+                    "L'app « Mon Temps » doit être installée sur la montre (voir le guide fourni avec le projet). " +
+                        "Rappels au poignet : Garmin Connect → Notifications et alertes → Notifications des applications → Mon Temps. " +
+                        "La notification de suivi reste sur le téléphone : la montre a son propre affichage.",
+                )
+            }
+
+            Section(
+                "donnees",
+                "Données",
+                if (p.autoBackupTreeUri == null) "Export, sauvegarde, restauration" else "Sauvegarde automatique activée",
+                open,
+                toggle,
+            ) {
+                SettingsRow("Exporter les sessions", "Fichier CSV pour tableur.", enabled = !busy, onClick = {
+                    csvLauncher.launch("mon-temps-sessions-$today.csv")
+                })
+                SettingsRow("Créer une sauvegarde", "Fichier JSON complet.", enabled = !busy, onClick = {
+                    jsonLauncher.launch("mon-temps-sauvegarde-$today.json")
+                })
+                SettingsRow("Restaurer une sauvegarde", "Remplace toutes les données actuelles.", enabled = !busy, onClick = {
+                    restoreLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+                })
+                SettingsRow(
+                    "Sauvegarde automatique",
+                    autoBackupSubtitle(p, folderLabel),
+                    value = if (p.autoBackupTreeUri == null) "Désactivée" else null,
+                    enabled = !busy,
+                    onClick = { if (p.autoBackupTreeUri == null) treeLauncher.launch(null) else autoBackupMenu = true },
+                )
+                Help("Fichiers enregistrés où vous le choisissez. Aucun accès général au stockage, aucune connexion réseau.")
+            }
 
             Text(
                 "Mon Temps ${BuildConfig.VERSION_NAME}",
@@ -308,6 +403,30 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit, onImpo
             windowStep = null
         }
     }
+    if (pickBedtime) {
+        TimePickerDialogFor(minutesToTime(state?.prefs?.bedtimeMinutes ?: 1380), onDismiss = { pickBedtime = false }) {
+            vm.setBedtimeMinutes(it.hour * 60 + it.minute)
+            pickBedtime = false
+        }
+    }
+    if (pickWake) {
+        TimePickerDialogFor(minutesToTime(state?.prefs?.wakeMinutes ?: 420), onDismiss = { pickWake = false }) {
+            vm.setWakeMinutes(it.hour * 60 + it.minute)
+            pickWake = false
+        }
+    }
+    chooseDays?.let { kind ->
+        val current = if (kind == SleepKind.BEDTIME) state?.prefs?.bedtimeDays else state?.prefs?.wakeDays
+        DaysDialog(
+            title = if (kind == SleepKind.BEDTIME) "Jours du coucher" else "Jours du réveil",
+            initial = current ?: AppPreferences.ALL_DAYS,
+            onConfirm = { days ->
+                if (kind == SleepKind.BEDTIME) vm.setBedtimeDays(days) else vm.setWakeDays(days)
+                chooseDays = null
+            },
+            onDismiss = { chooseDays = null },
+        )
+    }
     if (pickSummaryTime) {
         TimePickerDialogFor(minutesToTime(state?.prefs?.eveningSummaryMinutes ?: 1260), onDismiss = { pickSummaryTime = false }) {
             vm.setSummaryMinutes(it.hour * 60 + it.minute)
@@ -357,6 +476,19 @@ fun SettingsScreen(vm: SettingsViewModel, onManageActivities: () -> Unit, onImpo
     }
 }
 
+private enum class SleepKind { BEDTIME, WAKE }
+
+private fun sleepSummary(p: AppPreferences): String = listOfNotNull(
+    if (p.bedtimeEnabled) "Coucher ${clock(p.bedtimeMinutes)}" else null,
+    if (p.wakeEnabled) "réveil ${clock(p.wakeMinutes)}" else null,
+).joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { "Coucher et réveil automatiques désactivés" }
+
+private fun remindersSummary(p: AppPreferences): String = listOfNotNull(
+    if (p.longSessionReminder) "Session longue (${p.forgottenThresholdHours} h)" else null,
+    if (p.idleReminderEnabled) "rien n'est suivi (${p.idleReminderHours} h)" else null,
+    if (p.eveningSummaryEnabled) "résumé à ${clock(p.eveningSummaryMinutes)}" else null,
+).joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { "Aucun rappel" }
+
 private fun clock(minutes: Int): String =
     if (minutes >= 1440) "24:00" else String.format(Locale.ROOT, "%02d:%02d", minutes / 60, minutes % 60)
 
@@ -373,8 +505,89 @@ private fun autoBackupSubtitle(p: AppPreferences, folder: String?): String = whe
     else -> "Chaque semaine dans « ${folder ?: "…"} »"
 }
 
+/**
+ * Catégorie repliable : un en-tête (titre, résumé de l'état, chevron) ; le contenu ne s'affiche
+ * qu'à la demande. Un appui déplie ou replie.
+ */
 @Composable
-private fun Group(title: String) = SectionHeader(title, Modifier.padding(horizontal = 20.dp))
+private fun Section(
+    key: String,
+    title: String,
+    summary: String,
+    open: Set<String>,
+    onToggle: (String) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val isOpen = key in open
+    val scheme = MaterialTheme.colorScheme
+    val rotation by animateFloatAsState(if (isOpen) 180f else 0f, label = "chevron")
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = if (isOpen) "Replier" else "Déplier") { onToggle(key) }
+                .semantics {
+                    heading()
+                    stateDescription = if (isOpen) "Dépliée" else "Repliée"
+                }
+                .heightIn(min = 68.dp)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Icon(
+                Icons.Rounded.KeyboardArrowDown,
+                contentDescription = null,
+                tint = scheme.onSurfaceVariant,
+                modifier = Modifier.rotate(rotation),
+            )
+        }
+        AnimatedVisibility(visible = isOpen) {
+            Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) { content() }
+        }
+        HorizontalDivider(Modifier.padding(horizontal = 20.dp), thickness = 0.5.dp, color = scheme.outlineVariant)
+    }
+}
+
+/** Choix des jours (au moins un). */
+@Composable
+private fun DaysDialog(title: String, initial: Set<Int>, onConfirm: (Set<Int>) -> Unit, onDismiss: () -> Unit) {
+    var days by remember { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                SleepSchedule.DAY_NAMES.forEachIndexed { i, name ->
+                    val day = i + 1
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .toggleable(value = day in days, role = Role.Checkbox) { checked -> days = if (checked) days + day else days - day }
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(checked = day in days, onCheckedChange = null)
+                        Spacer(Modifier.width(12.dp))
+                        Text(name, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(days) }, enabled = days.isNotEmpty()) { Text("OK") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
+}
 
 @Composable
 private fun Help(text: String) {

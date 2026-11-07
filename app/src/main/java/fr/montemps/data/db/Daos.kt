@@ -30,6 +30,27 @@ interface ActivityDao {
 }
 
 @Dao
+interface SubActivityDao {
+    @Query("SELECT * FROM subactivities ORDER BY activity_id ASC, archived ASC, sort_order ASC, name ASC")
+    fun observeAll(): Flow<List<SubActivityEntity>>
+
+    @Query("SELECT * FROM subactivities ORDER BY activity_id ASC, archived ASC, sort_order ASC, name ASC")
+    suspend fun getAll(): List<SubActivityEntity>
+
+    @Query("SELECT * FROM subactivities WHERE id = :id")
+    suspend fun get(id: String): SubActivityEntity?
+
+    @Upsert
+    suspend fun upsert(sub: SubActivityEntity)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertAll(subs: List<SubActivityEntity>)
+
+    @Query("DELETE FROM subactivities")
+    suspend fun deleteAll()
+}
+
+@Dao
 interface SessionDao {
     @Query("SELECT * FROM sessions WHERE end_utc_ms IS NULL LIMIT 1")
     fun observeActive(): Flow<SessionEntity?>

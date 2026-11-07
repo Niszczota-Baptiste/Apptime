@@ -15,7 +15,13 @@ import java.time.Instant
  */
 interface TrackingCommands {
     suspend fun currentSession(): Session?
-    suspend fun switchTo(activityId: String, source: CommandSource = CommandSource.App): TransitionResult
+
+    /**
+     * Démarre [activityId] (sous-catégorie [subId] facultative). Sur l'activité déjà en cours :
+     * sans sous-catégorie, ou la même, rien ne change ; si la session en cours n'en avait pas, elle
+     * est seulement précisée ([TransitionResult.Refined]) ; sinon (Pro → Perso), c'est un changement.
+     */
+    suspend fun switchTo(activityId: String, source: CommandSource = CommandSource.App, subId: String? = null): TransitionResult
     suspend fun stop(source: CommandSource = CommandSource.App, expectedSessionId: Long? = null): TransitionResult
 }
 
@@ -23,6 +29,8 @@ sealed interface TransitionResult {
     /** Une nouvelle session a démarré (et la précédente, s'il y en avait une, s'est terminée au même instant). */
     data class Started(val session: Session, val previous: Session?) : TransitionResult
     data class Stopped(val session: Session) : TransitionResult
+    /** La session en cours, sans sous-catégorie, a reçu [Session.subId] (aucune nouvelle session). */
+    data class Refined(val session: Session) : TransitionResult
     /** Rien à faire : activité déjà active, aucun suivi à arrêter, ou commande périmée. */
     data class NoChange(val active: Session?) : TransitionResult
     data class Rejected(val reason: Reason) : TransitionResult
@@ -30,6 +38,8 @@ sealed interface TransitionResult {
     enum class Reason {
         UNKNOWN_ACTIVITY,
         ARCHIVED_ACTIVITY,
+        /** Sous-catégorie inconnue, retirée ou d'une autre activité. */
+        INVALID_SUB,
         /** L'heure système est antérieure à la dernière transition enregistrée. */
         CLOCK_BEFORE_LAST_RECORD,
         INVALID_END_TIME,
@@ -91,16 +101,46 @@ class TimeTracker(
 
     override suspend fun currentSession(): Session? = store.activeSession()
 
-    override suspend fun switchTo(activityId: String, source: CommandSource): TransitionResult =
-        transition(activityId, at = null, source = source)
+    override suspend fun switchTo(activityId: String, source: CommandSource, subId: String?): TransitionResult =
+        transition(activityId, subId, at = null, source = source)
 
     /**
      * Démarre [activityId] à l'instant passé [at] (« j'ai commencé il y a 10 min »). L'activité en
      * cours éventuelle se termine à [at]. Refusé si [at] est futur, antérieur au début de la session
      * en cours ou à la fin de la dernière session : jamais de chevauchement.
      */
-    suspend fun switchToAt(activityId: String, at: Instant, source: CommandSource = CommandSource.App): TransitionResult =
-        transition(activityId, at = at, source = source)
+    suspend fun switchToAt(
+        activityId: String,
+        at: Instant,
+        source: CommandSource = CommandSource.App,
+        subId: String? = null,
+    ): TransitionResult = transition(activityId, subId, at = at, source = source)
+
+    /** Ce que « Reprendre » démarrerait maintenant : activité et sous-catégorie encore valide. */
+    data class ResumePoint(val activityId: String, val subId: String?)
+
+    suspend fun resumePoint(): ResumePoint? {
+        val activities = store.activities().associateBy { it.id }
+        val recent = store.recentEndedSessions(ResumeRule.LOOKBACK)
+        val active = store.activeSession()
+        val session = if (active != null) {
+            ResumeRule.resumeSession(active, activities, recent)
+        } else {
+            ResumeRule.lastWorkSession(recent, activities, exclude = null)
+        } ?: return null
+        val sub = ResumeRule.usableSub(session, store.subActivities().associateBy { it.id })
+        return ResumePoint(session.activityId, sub?.id)
+    }
+
+    /**
+     * « Reprendre » : pendant une interruption, l'activité interrompue ; sans suivi, la dernière
+     * activité de travail — avec sa sous-catégorie. Utilisé par l'app, la notification, les
+     * widgets, la tuile et la montre. Rien à reprendre : [TransitionResult.NoChange].
+     */
+    suspend fun resume(source: CommandSource = CommandSource.App, at: Instant? = null): TransitionResult {
+        val point = resumePoint() ?: return TransitionResult.NoChange(store.activeSession())
+        return transition(point.activityId, point.subId, at, source)
+    }
 
     /** Limite basse d'un démarrage rétroactif (voir [BackdateLimit]). */
     suspend fun backdateLimit(): BackdateLimit {
@@ -140,11 +180,25 @@ class TimeTracker(
         return done
     }
 
-    private suspend fun transition(activityId: String, at: Instant?, source: CommandSource): TransitionResult {
+    private suspend fun transition(activityId: String, subId: String?, at: Instant?, source: CommandSource): TransitionResult {
         val result = lock.withLock {
             store.transaction {
                 val active = store.activeSession()
-                if (active?.activityId == activityId) return@transaction TransitionResult.NoChange(active)
+                if (subId != null) {
+                    val sub = store.subActivity(subId)
+                    if (sub == null || sub.activityId != activityId || sub.archived) {
+                        return@transaction TransitionResult.Rejected(TransitionResult.Reason.INVALID_SUB)
+                    }
+                }
+                if (active?.activityId == activityId) {
+                    // Même activité : rien à faire, sauf préciser la session ou changer de sous-catégorie.
+                    if (subId == null || subId == active.subId) return@transaction TransitionResult.NoChange(active)
+                    if (active.subId == null && at == null) {
+                        val refined = active.copy(subId = subId)
+                        store.updateSession(refined)
+                        return@transaction TransitionResult.Refined(refined)
+                    }
+                }
 
                 val activity = store.activity(activityId)
                     ?: return@transaction TransitionResult.Rejected(TransitionResult.Reason.UNKNOWN_ACTIVITY)
@@ -172,6 +226,7 @@ class TimeTracker(
                     startElapsedRealtimeMs = time.elapsedRealtimeMs() - Duration.between(start, now).toMillis(),
                     startBootCount = time.bootCount(),
                     source = source.id,
+                    subId = subId,
                 )
                 val id = store.insertSession(newSession)
                 TransitionResult.Started(newSession.copy(id = id), ended)

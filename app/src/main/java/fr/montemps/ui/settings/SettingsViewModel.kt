@@ -64,6 +64,17 @@ class SettingsViewModel(private val c: AppContainer) : ViewModel() {
     fun setIdleWindow(startMinutes: Int, endMinutes: Int) = update { c.preferences.setIdleWindow(startMinutes, endMinutes) }
     fun setSummary(v: Boolean) = update { c.preferences.setEveningSummary(v) }
     fun setSummaryMinutes(m: Int) = update { c.preferences.setEveningSummaryMinutes(m) }
+
+    // Coucher et réveil : un changement ne s'applique qu'aux échéances futures (jamais de
+    // bascule rétroactive au moment où l'on active ou modifie le réglage).
+    private suspend fun resetBedtime() = c.preferences.setBedtimeHandled(c.time.now().toEpochMilli())
+    private suspend fun resetWake() = c.preferences.setWakeHandled(c.time.now().toEpochMilli())
+    fun setBedtime(v: Boolean) = update { c.preferences.setBedtime(v); resetBedtime() }
+    fun setBedtimeMinutes(m: Int) = update { c.preferences.setBedtimeMinutes(m); resetBedtime() }
+    fun setBedtimeDays(days: Set<Int>) = update { c.preferences.setBedtimeDays(days); resetBedtime() }
+    fun setWake(v: Boolean) = update { c.preferences.setWake(v); resetWake() }
+    fun setWakeMinutes(m: Int) = update { c.preferences.setWakeMinutes(m); resetWake() }
+    fun setWakeDays(days: Set<Int>) = update { c.preferences.setWakeDays(days); resetWake() }
     fun canPostPromoted(): Boolean = c.notifier.canPostPromoted()
 
     /** Nom du dossier de sauvegarde automatique (« Documents »…), lu via le sélecteur Android. */

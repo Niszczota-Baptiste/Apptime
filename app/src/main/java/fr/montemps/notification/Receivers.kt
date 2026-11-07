@@ -24,7 +24,14 @@ class TrackingActionReceiver : BroadcastReceiver() {
         const val ACTION_SUMMARY = "fr.montemps.action.SUMMARY"
         const val ACTION_AUTO_BACKUP = "fr.montemps.action.AUTO_BACKUP"
         const val ACTION_WATCH = "fr.montemps.action.WATCH"
+        const val ACTION_RESUME = "fr.montemps.action.RESUME"
+        const val ACTION_BEDTIME = "fr.montemps.action.BEDTIME"
+        const val ACTION_WAKE = "fr.montemps.action.WAKE"
+        const val ACTION_UNDO = "fr.montemps.action.UNDO"
+        const val EXTRA_STARTED_ID = "started_id"
+        const val EXTRA_NOTIFICATION_ID = "notification_id"
         const val EXTRA_ACTIVITY_ID = "activity_id"
+        const val EXTRA_SUB_ID = "sub_id"
         const val EXTRA_SESSION_ID = "session_id"
         const val EXTRA_SOURCE = "source"
         const val EXTRA_WATCH_COMMAND = "watch_command"
@@ -41,6 +48,17 @@ class TrackingActionReceiver : BroadcastReceiver() {
                 when (intent.action) {
                     ACTION_SWITCH -> intent.getStringExtra(EXTRA_ACTIVITY_ID)?.let { container.tracker.switchTo(it, source) }
                     ACTION_STOP -> container.tracker.stop(source, sessionId)
+                    ACTION_RESUME -> container.tracker.resume(source)
+                    ACTION_BEDTIME, ACTION_WAKE -> {
+                        val at = intent.getLongExtra(EXTRA_AT, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }?.let(java.time.Instant::ofEpochMilli)
+                        if (at != null) {
+                            if (intent.action == ACTION_BEDTIME) container.sleep.fireBedtime(at) else container.sleep.fireWake(at)
+                        }
+                    }
+                    ACTION_UNDO -> {
+                        container.tracker.undo(TrackingIntents.undoTokenOf(intent))
+                        container.notifier.cancelSleep(intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0))
+                    }
                     ACTION_DISMISSED -> sessionId?.let { container.notifications.onUserDismissed(it) }
                     ACTION_REMINDER -> sessionId?.let { container.reminders.fire(it) }
                     ACTION_ACKNOWLEDGE -> sessionId?.let { container.reminders.acknowledge(it) }

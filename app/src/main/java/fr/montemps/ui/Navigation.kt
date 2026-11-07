@@ -90,8 +90,19 @@ fun MonTempsNavHost(
     startRoute: String = TopLevel.TODAY.route,
     destination: String? = null,
     onDestinationHandled: () -> Unit = {},
+    /** Activité dont ouvrir le choix de sous-catégorie (widget « Activités »). */
+    chooseActivity: String? = null,
+    onChooseHandled: () -> Unit = {},
 ) {
     val nav = rememberNavController()
+    LaunchedEffect(chooseActivity) {
+        if (chooseActivity == null) return@LaunchedEffect
+        nav.navigate(TopLevel.TODAY.route) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
     LaunchedEffect(destination) {
         val target = TopLevel.entries.firstOrNull { it.route == destination } ?: return@LaunchedEffect
         nav.navigate(target.route) {
@@ -126,6 +137,8 @@ fun MonTempsNavHost(
                         containerViewModel { TodayViewModel(it) },
                         onManageActivities = { nav.navigate("activities") },
                         onOpenHistory = { nav.navigate(TopLevel.HISTORY.route) { launchSingleTop = true } },
+                        pendingChoice = chooseActivity,
+                        onPendingChoiceHandled = onChooseHandled,
                     )
                 }
                 composable(TopLevel.HISTORY.route) {

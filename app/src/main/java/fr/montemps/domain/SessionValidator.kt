@@ -9,6 +9,8 @@ sealed interface SessionError {
     data object EndInFuture : SessionError
     data object StartInFuture : SessionError
     data object UnknownActivity : SessionError
+    /** Sous-catégorie inconnue, retirée ou d'une autre activité. */
+    data object InvalidSub : SessionError
     data object NotFound : SessionError
     /** Une session active ne peut pas voir son début modifié dans cette version. */
     data object ActiveStartLocked : SessionError

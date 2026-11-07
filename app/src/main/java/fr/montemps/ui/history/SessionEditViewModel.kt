@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import fr.montemps.AppContainer
 import fr.montemps.domain.EditResult
 import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.ui.message
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +26,9 @@ data class SessionEditState(
     val original: Session? = null,
     val activities: List<TrackedActivity> = emptyList(),
     val activityId: String? = null,
+    /** Toutes les sous-catégories (proposées : non retirées, ou celle déjà choisie). */
+    val subs: List<SubActivity> = emptyList(),
+    val subId: String? = null,
     val start: LocalDateTime = LocalDateTime.now(),
     val end: LocalDateTime = LocalDateTime.now(),
     val note: String = "",
@@ -33,6 +37,10 @@ data class SessionEditState(
     val done: Boolean = false,
 ) {
     val isActive: Boolean get() = original?.isActive == true
+
+    /** Sous-catégories proposées pour l'activité choisie. */
+    val subChoices: List<SubActivity>
+        get() = subs.filter { it.activityId == activityId && (!it.archived || it.id == subId) }.sortedBy { it.sortOrder }
 }
 
 /**
@@ -54,6 +62,7 @@ class SessionEditViewModel(
     init {
         viewModelScope.launch {
             val activities = c.store.activities()
+            val subs = c.store.subActivities()
             val session = sessionId?.let { c.store.session(it) }
             if (session != null) {
                 _state.value = SessionEditState(
@@ -62,6 +71,8 @@ class SessionEditViewModel(
                     original = session,
                     activities = activities,
                     activityId = session.activityId,
+                    subs = subs,
+                    subId = session.subId,
                     start = session.start.atZone(zone).toLocalDateTime(),
                     end = (session.end ?: c.time.now()).atZone(zone).toLocalDateTime().truncatedTo(ChronoUnit.MINUTES),
                     note = session.note.orEmpty(),
@@ -79,6 +90,7 @@ class SessionEditViewModel(
                     isNew = true,
                     activities = activities,
                     activityId = null,
+                    subs = subs,
                     start = prefillStart ?: end.minusHours(1),
                     end = prefillEnd ?: end,
                     error = if (sessionId != null) "Cette session n'existe plus." else null,
@@ -92,7 +104,9 @@ class SessionEditViewModel(
         return if (t == i) t else t.plusSeconds(60)
     }
 
-    fun setActivity(id: String) = _state.update { it.copy(activityId = id, error = null) }
+    /** Changer d'activité efface la sous-catégorie (elle appartient à l'ancienne activité). */
+    fun setActivity(id: String) = _state.update { it.copy(activityId = id, subId = if (id == it.activityId) it.subId else null, error = null) }
+    fun setSub(id: String?) = _state.update { it.copy(subId = id, error = null) }
     fun setStart(v: LocalDateTime) = _state.update { it.copy(start = v, error = null) }
     fun setEnd(v: LocalDateTime) = _state.update { it.copy(end = v, error = null) }
     fun setNote(v: String) = _state.update { it.copy(note = v.take(500)) }
@@ -107,9 +121,9 @@ class SessionEditViewModel(
         val start = ZonedDateTime.of(s.start, zone).toInstant()
         val end = ZonedDateTime.of(s.end, zone).toInstant()
         val result = when {
-            s.original == null -> c.editor.addPastSession(activityId, start, end, s.note)
-            s.isActive -> c.editor.updateSession(s.original.id, activityId, s.original.start, null, s.note)
-            else -> c.editor.updateSession(s.original.id, activityId, start, end, s.note)
+            s.original == null -> c.editor.addPastSession(activityId, start, end, s.note, subId = s.subId)
+            s.isActive -> c.editor.updateSession(s.original.id, activityId, s.original.start, null, s.note, s.subId)
+            else -> c.editor.updateSession(s.original.id, activityId, start, end, s.note, s.subId)
         }
         when (result) {
             is EditResult.Saved -> _state.update { it.copy(saving = false, done = true) }

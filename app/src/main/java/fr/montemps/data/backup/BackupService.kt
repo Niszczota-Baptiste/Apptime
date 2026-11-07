@@ -34,6 +34,7 @@ class BackupService(
                     activities = store.activities(),
                     sessions = store.allSessions(),
                     preferences = BackupPreferences.of(p),
+                    subActivities = store.subActivities(),
                 )
             }
         }
@@ -43,16 +44,16 @@ class BackupService(
 
     suspend fun exportCsv(): String {
         val s = snapshot()
-        return CsvExporter.export(s.sessions, s.activities, time.now())
+        return CsvExporter.export(s.sessions, s.activities, time.now(), s.subActivities)
     }
 
     fun decode(text: String): DecodeResult = BackupCodec.decode(text, time.now())
 
     suspend fun restore(snapshot: BackupSnapshot) {
         lock.withLock {
-            store.transaction { store.replaceAll(snapshot.activities, snapshot.sessions) }
+            store.transaction { store.replaceAll(snapshot.activities, snapshot.subActivities, snapshot.sessions) }
         }
-        prefs.restore(snapshot.preferences.toAppPreferences())
+        prefs.restore(snapshot.preferences.toAppPreferences(), time.now().toEpochMilli())
         listener.onDataChanged()
     }
 }

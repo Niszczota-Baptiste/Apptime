@@ -58,6 +58,12 @@ celle d'une installation précédente peut demander de désinstaller d'abord l'a
 - **START ou appui sur l'écran** : liste des activités dans l'ordre du téléphone, « Reprendre … »
   en tête (pendant une interruption, ou sans suivi), « Arrêter le suivi » en bas (avec
   confirmation). Une brève vibration confirme que le téléphone a reçu la commande.
+- **Sous-catégories** : une activité qui en a (Travail, Pause, Sport, Écriture, Musique,
+  Déplacement…) ouvre un second menu : Perso / Pro…, la sous-catégorie en cours marquée
+  « En cours », et « Sans précision » si l'activité n'est pas déjà en cours. L'écran principal
+  affiche le nom complet (« Travail · Pro ») ; « Reprendre » reprend aussi la sous-catégorie.
+  La liste vient du téléphone : une sous-catégorie ajoutée, renommée ou retirée dans l'app y
+  apparaît au prochain envoi d'état.
 - **Sans téléphone** (sortie sans téléphone, Bluetooth coupé) : la montre affiche tout de suite le
   changement et garde la commande en file avec son heure. Au retour de la connexion, le téléphone
   l'applique à cette heure si c'est encore possible (« j'ai commencé Sport à 18:00 »). Si quelque
@@ -107,6 +113,7 @@ Montre → téléphone :
 |---------|-------|
 | `{"v":1, "c":"status"}` | Renvoyer l'état (ouverture de l'app montre) |
 | `{"v":1, "c":"switch", "id":"sport", "at":1762362000}` | Démarrer / changer d'activité (à l'heure `at` si elle date de plus de 30 s) |
+| `{"v":1, "c":"switch", "id":"work", "sub":"work_pro", "at":…}` | Idem avec une sous-catégorie ; même activité sans sous-catégorie : la session est seulement précisée (même début). Sous-catégorie retirée entre-temps : refus « Sous-catégorie indisponible » |
 | `{"v":1, "c":"stop", "at":…}` | Arrêter le suivi |
 | `{"v":1, "c":"resume", "at":…}` | Reprendre l'activité interrompue (ou la dernière, sans suivi) |
 
@@ -114,11 +121,14 @@ Téléphone → montre (après chaque changement, réponse à toute commande) :
 
 ```
 {"v":1, "t":"state", "now":…, "d":20261105,
- "a":{"id":"work","n":"Travail","c":0x4A78E0,"s":1762326000,"i":false} | null,
+ "a":{"id":"work","n":"Travail · Pro","c":0x4A78E0,"s":1762326000,"i":false,
+      "sub":"work_pro" | null} | null,   // "n" : nom affiché, sous-catégorie comprise
  "td":10800,                       // temps suivi aujourd'hui à "now" (s)
- "r":{"id","n","c"} | null,        // « Reprendre » pendant une interruption
- "l":{"id","n","c"} | null,        // dernière activité, sans suivi
- "acts":[{"id","n","c"}, …], "fav":["break","work"],
+ "r":{"id","n","c","sub"} | null, // « Reprendre » pendant une interruption ("n" complet)
+ "l":{"id","n","c","sub"} | null, // dernière activité, sans suivi ("n" complet)
+ "acts":[{"id","n","c"},           // activités ; "subs" seulement si elle en a :
+         {"id","n","c","subs":[{"id":"work_perso","n":"Perso"}, …]}, …],
+ "fav":["break","work"],
  "msg":"…" | null}                 // refus éventuel de la dernière commande
 ```
 
@@ -144,9 +154,9 @@ envoi seulement si l'état change), `garmin/ConnectIqLink.kt` (SDK), `domain/wat
 
 Vérifié dans le conteneur de développement (sans montre ni téléphone) :
 
-- tests Android (protocole, commandes de la montre jusqu'au moteur de suivi, file hors ligne et
-  refus, activation et service désactivé par défaut, vrai SDK Garmin sans Garmin Connect, import
-  des séances) ;
+- tests Android (protocole, sous-catégories dans les deux sens, commandes de la montre jusqu'au
+  moteur de suivi, file hors ligne et refus, activation et service désactivé par défaut, vrai SDK
+  Garmin sans Garmin Connect, import des séances) ;
 - l'app montre **compile sans erreur au niveau de vérification de types le plus strict** (`-l 3`)
   avec le compilateur officiel Connect IQ 9.3.0, pour la Forerunner 965. Le fichier de définition
   officiel de la montre exige un compte Garmin : la compilation a utilisé une définition

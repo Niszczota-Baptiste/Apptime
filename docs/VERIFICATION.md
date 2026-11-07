@@ -1,4 +1,4 @@
-# Vérifications effectuées (version 0.1.0 : interface épurée, widgets, tuile, 10 améliorations d'usage, montre Garmin)
+# Vérifications effectuées (version 0.1.0 : interface épurée, widgets, tuile, 10 améliorations d'usage, montre Garmin, sous-catégories, coucher et réveil automatiques, réglages repliables)
 
 Téléphone cible : Redmi Note 17 Pro 5G (HyperOS 3, Android 16, 6 Go de RAM) — voir
 « Changement de téléphone » plus bas. Montre : Garmin Forerunner 965 — voir « Montre Garmin ».
@@ -10,13 +10,14 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 
 | Vérification | Commande | Résultat |
 |--------------|----------|----------|
-| Compilation debug | `./gradlew :app:assembleDebug` | OK : APK de 16,0 Mo, `fr.montemps.debug`, targetSdk 36 (SDK Connect IQ et Health Connect inclus) |
-| Compilation release (R8) | `./gradlew :app:assembleRelease` | OK : APK non signée de 2,2 Mo (règles R8 : classes du SDK Connect IQ conservées) |
-| Tests unitaires + Robolectric | `./gradlew :app:testDebugUnitTest` | **119/119 réussis** |
+| Compilation debug | `./gradlew :app:assembleDebug` | OK : APK de 16,5 Mo, `fr.montemps.debug`, targetSdk 36 (SDK Connect IQ et Health Connect inclus) |
+| Compilation release (R8) | `./gradlew :app:assembleRelease` | OK : APK non signée de 2,3 Mo (règles R8 : classes du SDK Connect IQ conservées) |
+| Tests unitaires + Robolectric | `./gradlew :app:testDebugUnitTest` | **148/148 réussis** (22 classes) |
 | Android Lint | `./gradlew :app:lintDebug` | 0 erreur ; 1 avertissement (`localeConfig` ignoré sous API 33, sans effet) |
-| Permissions de l'APK | `aapt2 dump permissions` | `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `POST_PROMOTED_NOTIFICATIONS` (permission normale des Live Updates), `health.READ_EXERCISE` (import des séances, demandée à l'utilisateur) + permission interne générée par AndroidX. Widgets, tuile, alarmes inexactes, dossier de sauvegarde (SAF) et SDK Connect IQ n'en ajoutent aucune |
-| Manifeste fusionné | `aapt2 dump xmltree` | Service du SDK Connect IQ `IQGarminBindingService` présent avec `enabled=false` (activé seulement par « Relier la montre ») |
-| App montre (Connect IQ) | `monkeyc -f garmin/monkey.jungle -d fr965 -l 3` (compilateur officiel 9.3.0) | **Compile sans erreur au niveau de types strict** ; `.prg` de 116 Ko. Définition de la Forerunner 965 reconstituée à partir des données du SDK (le fichier officiel exige un compte Garmin) ; aucun lancement (pas de simulateur ni de montre) |
+| Permissions de l'APK | `aapt2 dump permissions` | `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `POST_PROMOTED_NOTIFICATIONS` (permission normale des Live Updates), `health.READ_EXERCISE` (import des séances, demandée à l'utilisateur) + permission interne générée par AndroidX. Widgets, tuile, alarmes inexactes (coucher et réveil compris), dossier de sauvegarde (SAF) et SDK Connect IQ n'en ajoutent aucune ; inchangées par les sous-catégories et le coucher/réveil |
+| Manifeste fusionné | `aapt2 dump xmltree` | Service du SDK Connect IQ `IQGarminBindingService` présent avec `enabled=false` (activé seulement par « Relier la montre ») ; aucun composant ajouté ni exporté par cette version |
+| Pages mémoire de 16 Ko | `zipalign -c -P 16 4` | OK sur l'APK debug |
+| App montre (Connect IQ) | `monkeyc -f garmin/monkey.jungle -d fr965 -l 3` (compilateur officiel 9.3.0) | **Compile sans erreur ni avertissement au niveau de types strict** (sous-menu des sous-catégories compris) ; `.prg` de 119 Ko. Définition de la Forerunner 965 reconstituée à partir des données du SDK (le fichier officiel exige un compte Garmin) ; aucun lancement (pas de simulateur ni de montre) |
 
 ## Couverture des tests
 
@@ -45,7 +46,7 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 | Restauration valide (aller-retour complet) | `BackupTest.exportThenRestoreRoundTrip` |
 | Rejet de sauvegardes invalides sans modification | `BackupTest.invalidBackupsAreRejectedWithoutTouchingData`, `overlappingSessionsInBackupAreRejected` |
 | CSV | `BackupTest.csvIsSpreadsheetFriendly` |
-| Lecture d'une sauvegarde v1 (format actuel : v2) | `BackupTest.version1BackupIsStillReadable` |
+| Lecture d'une sauvegarde v1 (format actuel : v4) | `BackupTest.version1BackupIsStillReadable` |
 | Widget « Suivi en cours » : activité, chronomètre natif (base monotone), Arrêter, favorites, total du jour, état inactif | `SurfacesTest.trackingWidgetFollowsTheActiveSessionWithANativeChronometer` |
 | Widget « Activités » : ordre, activité active marquée | `SurfacesTest.activitiesWidgetListsShortcutsAndMarksTheActiveOne` |
 | Clics dans les widgets → logique commune (source `widget`) | `SurfacesTest.widgetButtonsGoThroughTheSharedTrackingLogic` |
@@ -68,10 +69,24 @@ Environnement : conteneur Linux sans KVM (aucun émulateur possible), JDK 21, An
 | **8. Live Update** : demande de promotion et critères documentés, réglage pour la désactiver | `ScheduledNotificationsTest.trackingNotificationRequestsLiveUpdateAndOffersResumeDuringABreak` |
 | **9. Tendances** : comparaison au même moment, moyenne ; séries (objectif quotidien respecté) | `InsightsTest.weekComparisonAtTheSameMomentAndDailyAverage`, `streaksCountConsecutiveDaysAndRespectDailyGoals` |
 | **10. Sauvegarde automatique** : fichier restaurable, 8 copies, échéance hebdomadaire, échec puis nouvel essai | `AutoBackupTest` (dossier simulé en mémoire) |
-| Migration de la base v1 → v2 sans perte | `MigrationTest.version1DatabaseIsMigratedWithoutDataLoss` |
-| Sauvegarde v3 (objectifs, interruptions, préférences) et lecture des v1/v2 | `BackupTest.exportThenRestoreRoundTrip`, `version1BackupIsStillReadable` |
+| Migration de la base v1 → v2 → v3 sans perte (bases créées avec les schémas exportés v1 et v2, validées par Room) | `MigrationTest.version1DatabaseIsMigratedWithoutDataLoss`, `version2DatabaseGetsSubCategoriesRenamedTravelAndSleep`, `version2RenamedTravelAndExistingSleepAreLeftAlone` |
+| Sauvegarde v4 (sous-catégories, sessions précisées, coucher/réveil) et lecture des v1 à v3 | `BackupTest.exportThenRestoreRoundTrip`, `version1BackupIsStillReadable` |
+| Sauvegarde refusée si une session cite une sous-catégorie inconnue ou d'une autre activité | `BackupTest.invalidBackupsAreRejectedWithoutTouchingData` |
+| **Sous-catégories** : valeurs par défaut (Déplacement, Sommeil, Repas sans sous-catégorie) | `SubActivitiesTest.freshInstallHasDefaultSubCategoriesDeplacementAndSommeil` |
+| **Sous-catégories** : choisir démarre, même choix sans effet, autre choix = changement sans trou, session sans précision précisée sur place | `SubActivitiesTest.choosingASubStartsRefinesOrSwitches`, `aSessionWithoutSubIsRefinedInPlace` |
+| **Sous-catégories** : refus d'une sous-catégorie inconnue, retirée ou d'une autre activité (logique, saisie, trigger SQLite) | `SubActivitiesTest.invalidOrRetiredSubIsRejected`, `editorAcceptsOnlyASubOfTheSessionActivity`, `databaseRejectsASubOfAnotherActivityEvenIfLogicIsBypassed` |
+| **Sous-catégories** : « Reprendre » garde la sous-catégorie (sauf si elle a été retirée) | `SubActivitiesTest.resumeAfterABreakKeepsTheSubCategory`, `SurfacesTest.surfacesShowTheSubCategoryAndResumeIt` |
+| **Sous-catégories** : ajout, renommage, retrait puis rétablissement avec le même identifiant | `SubActivitiesTest.catalogAddsRenamesAndRestoresSubCategories` |
+| **Sous-catégories** : bilans détaillés (« sans précision » à part) ; CSV | `SubActivitiesTest.reportsSplitAnActivityBySubCategory`, `BackupTest.csvIsSpreadsheetFriendly` |
+| **Sous-catégories** : widget « Activités » → choix dans l'app, rien ne démarre avant ; nom complet dans le widget et la tuile | `SurfacesTest.anActivityWithSubCategoriesOpensTheChooserInTheApp`, `surfacesShowTheSubCategoryAndResumeIt` |
+| **Sous-catégories** : séance importée → sous-catégorie d'après le type | `WorkoutImportTest.subCategoryIsSuggestedFromTheWorkoutType` |
+| **Coucher et réveil** : échéances (heure, jours, changements d'heure), délai de grâce, une seule fois, rien de rétroactif, libellés des jours | `SleepScheduleTest` (5 tests) |
+| **Coucher** : réglage comme depuis l'écran, alarme inexacte (`RTC`), Sommeil démarré à l'heure prévue malgré une alarme en retard, notification silencieuse, échéance suivante, « Annuler » | `SleepTest.bedtimeStartsSleepAtTheScheduledTimeAndCanBeUndone` |
+| **Réveil** : Sommeil arrêté à l'heure prévue, durée, favorites, « Je dors encore » | `SleepTest.wakeStopsSleepAtTheScheduledTimeAndCanBeUndone` |
+| **Coucher et réveil** : le suivi manuel l'emporte ; réglage jamais rétroactif ; jours ; désactivation ; Sommeil archivée rétablie | `SleepTest.whatTheUserDidMeanwhileAlwaysWins`, `changingTheSettingIsNeverRetroactiveAndDisablingCancels`, `anArchivedSleepActivityIsRestored` |
 | Permission refusée puis accordée | `NotificationTest.trackingWorksWithoutNotificationPermission` |
-| **Montre** : format des messages (commandes, heure d'origine, commandes trop anciennes, état, envoi seulement si l'état change) | `WatchProtocolTest` (5 tests) |
+| **Montre** : format des messages (commandes, heure d'origine, commandes trop anciennes, état, envoi seulement si l'état change) | `WatchProtocolTest` (6 tests) |
+| **Montre** : sous-catégories dans les deux sens (commande, nom complet, sous-menus, renommage renvoyé) ; refus d'une sous-catégorie retirée | `WatchProtocolTest.subCategoriesTravelBothWays`, `WatchIntegrationTest.subCategoryChosenOnTheWatchIsAppliedOrRefused` |
 | **Montre** : liaison coupée et service du SDK désactivé par défaut, activation | `WatchIntegrationTest.linkIsOffAndTheSdkServiceDisabledUntilTheUserEnablesIt` |
 | **Montre** : commande → récepteur → `TimeTracker` (source `watch`) → état renvoyé ; commande répétée sans effet | `WatchIntegrationTest.commandFromTheWatchSwitchesActivityAndRepliesWithTheNewState`, `stateIsSentWhenItChangesOnly` |
 | **Montre** : commande hors ligne appliquée à son heure ; refus si le téléphone a changé depuis ; reprise | `WatchIntegrationTest.offlineCommandIsAppliedAtItsOriginalTime`, `outdatedOfflineCommandIsRefusedWithAMessage`, `resumeAfterABreakReturnsToTheInterruptedActivity` |
@@ -99,23 +114,26 @@ sur un fond neutre — le reste de l'écran d'accueil n'est pas simulé). Les PN
 | `03-historique`, `16-historique-sombre` | Sessions du jour, session à cheval sur minuit |
 | `04-modifier-session`, `09-chevauchement-refuse` | Correction, refus d'un chevauchement |
 | `05-bilan-jour`, `06-bilan-semaine`, `06b-bilan-semaine-page-entiere`, `17-bilan-semaine-sombre` | Bilans |
-| `07-reglages`, `08-activites` | Réglages, gestion des activités |
+| `07-reglages`, `08-activites` | Réglages (catégories repliées), gestion des activités |
 | `10-aujourdhui-grand-texte` | Taille de texte ×1,8 sur 393 dp (une colonne, chronomètre ajusté, intitulés entiers) |
 | `11-premier-lancement` | État vide « Aucune activité en cours » |
 | `12-session-oubliee`, `13-session-oubliee-correction` | Session oubliée |
 | `14-notification`, `15-notification-rappel`, `26-notification-inactivite` | Notifications de suivi, de session longue et « rien n'est suivi » (vues construites par Android) |
 | `19-ecran-accueil-widgets`, `20-ecran-accueil-widgets-sombre` | Widgets « Suivi en cours » et « Activités » |
 | `21-aujourdhui-pause-page-entiere` | Pause en cours : « Reprendre Travail », objectifs du jour |
-| `22-demarrer-plus-tot`, `23-annuler` | Appui long « Démarrer plus tôt », puis message « Annuler » |
+| `22a-demarrer-plus-tot-sous-categorie`, `22-demarrer-plus-tot`, `23-annuler` | Appui long sur Sport : choix de la sous-catégorie, puis « Démarrer plus tôt », puis message « Annuler » |
+| `29-choix-sous-categorie`, `30-aujourdhui-sous-categorie` | Appui sur Sport : Muscu / Foot / Course / Autre / Sans précision ; « Sport · Muscu » en cours |
+| `31-gerer-sous-categories` | Gestion des sous-catégories de Travail (renommer, retirer, ajouter) |
+| `32-notification-coucher`, `33-notification-reveil` | Notifications du coucher (« Annuler ») et du réveil (favorites, « Je dors encore ») |
 | `24-combler-un-trou` | Saisie préremplie depuis une période « Non suivi » de l'historique |
 | `05b-bilan-jour-page-entiere` | Objectifs du jour et séries en cours |
 | `06b-bilan-semaine-page-entiere` | Comparaison au même moment, moyenne, objectifs, évolution, séries, vue par jour |
-| `07b-reglages-page-entiere` | Réglages complets (Live Update, rappels, sauvegarde automatique) |
+| `07b-reglages-page-entiere` | Catégories Notification, Sommeil (coucher et réveil activés) et Rappels dépliées |
 | `25-modifier-activite` | Interruption et objectif d'une activité |
-| `27-reglages-montre-garmin` | Section « Montre Garmin » (liaison active, état de la montre simulé) |
+| `27-reglages-montre-garmin` | Catégorie « Montre Garmin » dépliée (liaison active, état de la montre simulé) |
 | `28-seances-sportives` | Import des séances : cochée, déjà dans l'historique, chevauchement (séances simulées) |
 
-Points vérifiés à la relecture : les dix raccourcis tiennent sur un écran, l'activité active est
+Points vérifiés à la relecture : les onze raccourcis (Sommeil compris) tiennent sur un écran, l'activité active est
 reconnaissable sans la couleur (négatif + « En cours »), le chronomètre reste sur une ligne en très
 grand texte, contrastes suffisants en clair comme en sombre, les états vides sont explicites.
 Corrections faites après relecture : rangée des favorites coupée dans le widget (ligne d'infos
@@ -126,6 +144,14 @@ section), les libellés de la barre du bas rétrécissent légèrement au lieu d
 normale, les captures sont identiques au pixel près avant et après la correction.
 Bug trouvé par les tests et corrigé : la comparaison de semaines comptait des sessions de la
 semaine précédente postérieures au « même moment ».
+Sous-catégories et coucher/réveil, corrections après relecture et tests : les choix de
+sous-catégorie (et les durées de « Démarrer plus tôt ») étaient en gris secondaire, comme
+« Sans précision » → couleur du texte principal ; bugs trouvés par les nouveaux tests et corrigés :
+(1) si Sommeil avait été archivée, le coucher automatique échouait sans rien dire (recréation
+refusée car le nom existe) → Sommeil est désarchivée ; (2) restaurer une sauvegarde pouvait
+déclencher un coucher rétroactif (échéance des 2 dernières heures) → coucher et réveil sont marqués
+traités jusqu'à la restauration. La capture du widget « Activités » a été agrandie (6 rangées pour
+11 activités).
 Non capturé : le résumé du soir (style « texte long » mal rendu par le simulateur) ; son contenu est
 vérifié par les tests.
 
@@ -158,7 +184,7 @@ l'appelant avant de transmettre (seule voie écoutée pour les commandes), un r�
 sans vérification (non utilisé pour les commandes). Non vérifié, faute de matériel : rendu et
 fonctionnement de l'app sur la montre, liaison Bluetooth réelle, réception en arrière-plan,
 installation par USB, présence des séances Garmin dans Health Connect, effet de `setLocalOnly`
-sur Garmin Connect. → `docs/TEST_TELEPHONE.md`, section 22.
+sur Garmin Connect, sous-menu des sous-catégories sur l'écran de la montre. → `docs/TEST_TELEPHONE.md`, section 22.
 
 ## Non vérifié / limites connues
 
@@ -171,9 +197,14 @@ sur Garmin Connect. → `docs/TEST_TELEPHONE.md`, section 22.
   affichage du sous-titre de la tuile, fonctionnement des boutons de widget après un arrêt forcé.
 - Le chronomètre des widgets et de la notification utilise le format du système (« 22:10 »,
   « 1:23:45 »), légèrement différent de l'app (« 00:22:10 »).
-- Rappels, résumé, rafraîchissement de minuit et sauvegarde automatique reposent sur des alarmes
-  inexactes : ils peuvent arriver avec quelques minutes de retard (choix volontaire : ni permission
-  spéciale ni réveil de l'appareil).
+- Rappels, résumé, coucher et réveil automatiques, rafraîchissement de minuit et sauvegarde
+  automatique reposent sur des alarmes inexactes : ils peuvent arriver avec quelques minutes de
+  retard (choix volontaire : ni permission spéciale ni réveil de l'appareil). Pour le coucher et le
+  réveil, l'heure enregistrée est l'heure prévue ; seule la notification peut être en retard. Le
+  retard réel sous HyperOS (écran éteint, économiseur, nuit entière) reste à mesurer
+  (`docs/TEST_TELEPHONE.md`, section 25).
+- Sous-catégories : les favorites de la notification et la tuile démarrent « sans précision » (pas
+  de place pour un second choix) ; le widget « Activités » ouvre l'app sur le choix.
 - **Live Update** : la demande de promotion et les critères documentés sont vérifiés, mais la
   promotion effective dépend d'Android 16, des réglages de l'utilisateur et d'HyperOS (qui peut
   appliquer ses propres critères) ; la méthode `hasPromotableCharacteristics()` de la plateforme
@@ -196,14 +227,14 @@ sur Garmin Connect. → `docs/TEST_TELEPHONE.md`, section 22.
 - Pas d'annulation (« undo ») après *suppression* dans l'historique (une confirmation est demandée) ;
   l'annulation existe pour les changements d'activité et l'arrêt.
 - Les nouvelles couleurs par défaut des activités ne s'appliquent qu'à une installation neuve ;
-  sur une installation existante, les couleurs se changent dans Réglages → Gérer les activités.
+  sur une installation existante, les couleurs se changent dans Réglages → Activités → Gérer les activités.
 - Restauration = remplacement complet (pas de fusion).
 - Always-on Display : hors périmètre.
 
 ## Prochaines améliorations (hors périmètre de cette version)
 
 1. Tester sur le Redmi et la Forerunner 965 et ajuster selon les résultats de `docs/TEST_TELEPHONE.md`
-   (sections 15 à 20 pour les nouveautés, 22 pour la montre).
+   (sections 15 à 20 et 23 à 25 pour les nouveautés, 22 pour la montre).
 2. Montre : « Annuler » depuis le poignet, complication pour cadran (API 4.2+), séance Garmin
    terminée → proposition d'import immédiate (événement « activité terminée » de la montre).
 3. Annulation après suppression dans l'historique et édition du début de la session active.

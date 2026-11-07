@@ -1,12 +1,18 @@
 package fr.montemps.domain
 
 import fr.montemps.domain.model.Goal
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import java.util.UUID
 
 sealed interface CatalogResult {
     data class Ok(val activity: TrackedActivity) : CatalogResult
     data class Error(val message: String) : CatalogResult
+}
+
+sealed interface SubResult {
+    data class Ok(val sub: SubActivity) : SubResult
+    data class Error(val message: String) : SubResult
 }
 
 /**
@@ -89,6 +95,56 @@ class ActivityCatalog(
         val archived = store.activities().filter { it.archived }.sortedBy { it.sortOrder }
         (visible + archived).forEachIndexed { i, a -> if (a.sortOrder != i) store.upsertActivity(a.copy(sortOrder = i)) }
         CatalogResult.Ok(item)
+    }
+
+    /**
+     * Ajoute une sous-catégorie à [activityId]. Un nom déjà retiré est simplement rétabli (même
+     * identifiant : l'historique qui y fait référence le retrouve).
+     */
+    suspend fun addSub(activityId: String, name: String): SubResult = writeSub {
+        val activity = store.activity(activityId) ?: return@writeSub SubResult.Error("Activité introuvable.")
+        val clean = name.trim()
+        validateSubName(clean, activity.id, excludeId = null)?.let { return@writeSub SubResult.Error(it) }
+        val siblings = store.subActivities().filter { it.activityId == activity.id }
+        val retired = siblings.firstOrNull { it.archived && it.name.equals(clean, ignoreCase = true) }
+        val sub = retired?.copy(archived = false, name = clean, sortOrder = nextSubOrder(siblings))
+            ?: SubActivity(UUID.randomUUID().toString(), activity.id, clean, nextSubOrder(siblings))
+        store.upsertSubActivity(sub)
+        SubResult.Ok(sub)
+    }
+
+    suspend fun renameSub(id: String, name: String): SubResult = writeSub {
+        val existing = store.subActivity(id) ?: return@writeSub SubResult.Error("Sous-catégorie introuvable.")
+        val clean = name.trim()
+        validateSubName(clean, existing.activityId, excludeId = id)?.let { return@writeSub SubResult.Error(it) }
+        val updated = existing.copy(name = clean)
+        store.upsertSubActivity(updated)
+        SubResult.Ok(updated)
+    }
+
+    /** Retirer = archiver : la sous-catégorie n'est plus proposée, l'historique la garde. */
+    suspend fun setSubArchived(id: String, archived: Boolean): SubResult = writeSub {
+        val existing = store.subActivity(id) ?: return@writeSub SubResult.Error("Sous-catégorie introuvable.")
+        val updated = existing.copy(archived = archived)
+        store.upsertSubActivity(updated)
+        SubResult.Ok(updated)
+    }
+
+    private fun nextSubOrder(siblings: List<SubActivity>) = (siblings.maxOfOrNull { it.sortOrder } ?: -1) + 1
+
+    private suspend fun validateSubName(name: String, activityId: String, excludeId: String?): String? {
+        if (name.isEmpty()) return "Le nom ne peut pas être vide."
+        if (name.length > 30) return "Le nom est trop long (30 caractères maximum)."
+        val duplicate = store.subActivities().any {
+            it.activityId == activityId && it.id != excludeId && !it.archived && it.name.equals(name, ignoreCase = true)
+        }
+        return if (duplicate) "Cette sous-catégorie existe déjà." else null
+    }
+
+    private suspend fun writeSub(block: suspend () -> SubResult): SubResult {
+        val result = lock.withLock { store.transaction { block() } }
+        if (result is SubResult.Ok) listener.onDataChanged()
+        return result
     }
 
     private suspend fun validateName(name: String, excludeId: String?): String? {

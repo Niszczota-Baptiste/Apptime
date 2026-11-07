@@ -37,7 +37,7 @@ class TrackingTileService : TileService() {
         container.appScope.launch {
             when (val action = TileModel.from(container.surfaces.load()).action) {
                 is TileAction.Stop -> container.tracker.stop(CommandSource.Tile, action.sessionId)
-                is TileAction.Resume -> container.tracker.switchTo(action.activityId, CommandSource.Tile)
+                is TileAction.Resume -> container.tracker.resume(CommandSource.Tile)
                 TileAction.OpenApp -> withContext(Dispatchers.Main) { openApp() }
             }
             val model = TileModel.from(container.surfaces.load())

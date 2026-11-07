@@ -10,7 +10,9 @@ import fr.montemps.domain.TransitionResult
 import fr.montemps.domain.UndoToken
 import fr.montemps.domain.model.GoalPeriod
 import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
+import fr.montemps.domain.model.displayName
 import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.report.GoalProgress
 import fr.montemps.domain.report.Goals
@@ -58,10 +60,19 @@ data class TodayUiState(
     val clockShiftMinutes: Long?,
     val notificationDismissed: Boolean,
     val notificationPermissionAsked: Boolean,
-    /** Pendant une interruption : activité à reprendre en un appui. */
+    /** Pendant une interruption : activité à reprendre en un appui (et sa sous-catégorie). */
     val resume: TrackedActivity? = null,
+    val resumeSub: SubActivity? = null,
     val dailyGoals: List<GoalProgress> = emptyList(),
-)
+    /** Sous-catégories proposées (non retirées), par activité, dans l'ordre. */
+    val subsByActivity: Map<String, List<SubActivity>> = emptyMap(),
+    /** Toutes les sous-catégories (noms des sessions, y compris retirées). */
+    val subsById: Map<String, SubActivity> = emptyMap(),
+) {
+    /** « Travail · Pro » pour une session. */
+    fun label(session: Session): String =
+        displayName(activitiesById[session.activityId]?.name ?: session.activityId, session.subId?.let { subsById[it]?.name })
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TodayViewModel(private val c: AppContainer) : ViewModel() {
@@ -78,13 +89,19 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
             c.store.observeSessionsOverlapping(from, to)
         }
 
-    private data class Base(val activities: List<TrackedActivity>, val active: Session?, val recent: List<Session>)
+    private data class Base(
+        val activities: List<TrackedActivity>,
+        val active: Session?,
+        val recent: List<Session>,
+        val subs: List<SubActivity>,
+    )
 
     private val base = combine(
         c.store.observeActivities(),
         c.store.observeActiveSession(),
         c.store.observeRecentEnded(ResumeRule.LOOKBACK),
-    ) { activities, active, recent -> Base(activities, active, recent) }
+        c.store.observeSubActivities(),
+    ) { activities, active, recent, subs -> Base(activities, active, recent, subs) }
 
     val state: StateFlow<TodayUiState?> = combine(
         ticker,
@@ -95,7 +112,9 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
         val zone = c.time.zone()
         val today = now.atZone(zone).toLocalDate()
         val byId = b.activities.associateBy { it.id }
+        val subsById = b.subs.associateBy { it.id }
         val report = ReportCalculator.dayReport(sessions, today, zone, now)
+        val resumeSession = ResumeRule.resumeSession(b.active, byId, b.recent)
         TodayUiState(
             now = now,
             zone = zone,
@@ -108,8 +127,11 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
             clockShiftMinutes = clockShift(b.active, now),
             notificationDismissed = b.active != null && prefs.dismissedNotificationSessionId == b.active.id,
             notificationPermissionAsked = prefs.notificationPermissionAsked,
-            resume = ResumeRule.resumeTarget(b.active, byId, b.recent),
+            resume = resumeSession?.let { byId[it.activityId] },
+            resumeSub = ResumeRule.usableSub(resumeSession, subsById),
             dailyGoals = Goals.progress(b.activities, report, GoalPeriod.DAY),
+            subsByActivity = b.subs.filter { !it.archived }.groupBy { it.activityId }.mapValues { (_, l) -> l.sortedBy { it.sortOrder } },
+            subsById = subsById,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -130,10 +152,17 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
         return if (abs(diffMin) >= 2) diffMin else null
     }
 
-    fun onActivityTap(id: String) = viewModelScope.launch { report(c.tracker.switchTo(id)) }
+    fun onActivityTap(id: String) = start(id, null)
+
+    /** Démarre [id] avec la sous-catégorie [subId] (null = sans précision) ; précise la session en cours si besoin. */
+    fun start(id: String, subId: String?) = viewModelScope.launch { report(c.tracker.switchTo(id, subId = subId)) }
 
     /** Démarrage rétroactif (« il y a 10 min »). */
-    fun startAt(id: String, at: Instant) = viewModelScope.launch { report(c.tracker.switchToAt(id, at), backdated = true) }
+    fun startAt(id: String, at: Instant, subId: String? = null) =
+        viewModelScope.launch { report(c.tracker.switchToAt(id, at, subId = subId), backdated = true) }
+
+    /** « Reprendre » : l'activité interrompue, avec sa sous-catégorie. */
+    fun resume() = viewModelScope.launch { report(c.tracker.resume()) }
 
     suspend fun backdateLimit(): BackdateLimit = c.tracker.backdateLimit()
 
@@ -150,14 +179,20 @@ class TodayViewModel(private val c: AppContainer) : ViewModel() {
         when (result) {
             is TransitionResult.Rejected -> messages.send(TodayEvent.Message(result.reason.message()))
             is TransitionResult.Started -> {
-                val name = c.store.activity(result.session.activityId)?.name ?: result.session.activityId
+                val name = sessionLabel(result.session)
                 val text = if (backdated) "En cours : $name, depuis ${Fmt.time(result.session.start, c.time.zone())}" else "En cours : $name"
                 result.undoToken()?.let { messages.send(TodayEvent.Undoable(text, it)) }
             }
+            is TransitionResult.Refined -> messages.send(TodayEvent.Message("Précisé : ${sessionLabel(result.session)}"))
             is TransitionResult.Stopped -> result.undoToken()?.let { messages.send(TodayEvent.Undoable("Suivi arrêté", it)) }
             is TransitionResult.NoChange -> Unit
         }
     }
+
+    private suspend fun sessionLabel(session: Session): String = displayName(
+        c.store.activity(session.activityId)?.name ?: session.activityId,
+        session.subId?.let { c.store.subActivity(it)?.name },
+    )
 
     fun continueForgotten(sessionId: Long) = viewModelScope.launch {
         c.reminders.acknowledge(sessionId)

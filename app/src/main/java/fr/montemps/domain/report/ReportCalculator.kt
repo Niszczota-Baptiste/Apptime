@@ -13,7 +13,14 @@ data class ActivityShare(
     val duration: Duration,
     /** Part de cette activité dans le temps *suivi* de la période (0..1). */
     val shareOfTracked: Double,
+    /**
+     * Répartition par sous-catégorie (null = sans précision), de la plus longue à la plus courte.
+     * Vide si aucune session de l'activité n'a de sous-catégorie sur la période.
+     */
+    val bySub: List<SubShare> = emptyList(),
 )
+
+data class SubShare(val subId: String?, val duration: Duration)
 
 /**
  * Bilan d'une période [from, to).
@@ -73,17 +80,27 @@ object ReportCalculator {
 
     fun report(sessions: List<Session>, from: Instant, to: Instant, now: Instant): PeriodReport {
         val byActivity = LinkedHashMap<String, Duration>()
+        val bySub = HashMap<String, LinkedHashMap<String?, Duration>>()
         var includesActive = false
         for (s in sessions) {
             val d = clippedDuration(s, from, to, now)
             if (d.isZero) continue
             if (s.isActive) includesActive = true
             byActivity[s.activityId] = (byActivity[s.activityId] ?: Duration.ZERO) + d
+            val subs = bySub.getOrPut(s.activityId) { LinkedHashMap() }
+            subs[s.subId] = (subs[s.subId] ?: Duration.ZERO) + d
         }
         val tracked = byActivity.values.fold(Duration.ZERO, Duration::plus)
         val totals = byActivity.entries
             .map { (id, d) ->
-                ActivityShare(id, d, if (tracked.isZero) 0.0 else d.toMillis().toDouble() / tracked.toMillis())
+                val subs = bySub[id].orEmpty()
+                ActivityShare(
+                    activityId = id,
+                    duration = d,
+                    shareOfTracked = if (tracked.isZero) 0.0 else d.toMillis().toDouble() / tracked.toMillis(),
+                    bySub = if (subs.keys.all { it == null }) emptyList() else subs.map { (sub, sd) -> SubShare(sub, sd) }
+                        .sortedWith(compareByDescending<SubShare> { it.duration }.thenBy { it.subId == null }),
+                )
             }
             .sortedWith(compareByDescending<ActivityShare> { it.duration }.thenBy { it.activityId })
         val periodLength = Duration.between(from, to)

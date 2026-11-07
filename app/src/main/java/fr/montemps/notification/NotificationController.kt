@@ -3,6 +3,7 @@ package fr.montemps.notification
 import fr.montemps.data.prefs.PreferencesRepository
 import fr.montemps.domain.ResumeRule
 import fr.montemps.domain.TrackingStore
+import fr.montemps.domain.model.displayName
 import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.time.TimeSource
 import kotlinx.coroutines.sync.Mutex
@@ -42,8 +43,11 @@ class NotificationController(
         val zone = time.zone()
         val today = time.now().atZone(zone).toLocalDate()
         val byId = store.activities().associateBy { it.id }
-        // Pendant une interruption (Pause, Repas…) : « Reprendre Travail » en première action.
-        val resume = ResumeRule.resumeTarget(active, byId, store.recentEndedSessions(ResumeRule.LOOKBACK))
+        // Pendant une interruption (Pause, Repas…) : « Reprendre Travail · Pro » en première action.
+        val subs = store.subActivities().associateBy { it.id }
+        val resumeSession = ResumeRule.resumeSession(active, byId, store.recentEndedSessions(ResumeRule.LOOKBACK))
+        val resume = resumeSession?.let { byId[it.activityId] }
+        val resumeLabel = resume?.let { displayName(it.name, ResumeRule.usableSub(resumeSession, subs)?.name) }
         // Android n'affiche que 3 actions : [Reprendre] + favorites + Arrêter.
         val favorites = p.favoriteIds
             .filter { it != active.activityId && it != resume?.id }
@@ -54,13 +58,13 @@ class NotificationController(
         notifier.show(
             TrackingNotificationContent(
                 sessionId = active.id,
-                activityName = activity.name,
+                activityName = displayName(activity.name, active.subId?.let { subs[it]?.name }),
                 activityColor = activity.color,
                 start = active.start,
                 startLabel = Fmt.startLabel(active.start, today, zone),
                 favorites = favorites,
                 hideNameOnLockScreen = p.hideNameOnLockScreen,
-                resume = resume?.let { FavoriteAction(it.id, "Reprendre ${it.name}") },
+                resume = resume?.let { FavoriteAction(it.id, "Reprendre $resumeLabel") },
                 promoted = p.promotedNotification,
             ),
         )

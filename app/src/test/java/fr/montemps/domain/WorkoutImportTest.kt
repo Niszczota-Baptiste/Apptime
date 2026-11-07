@@ -6,6 +6,7 @@ import fr.montemps.domain.workouts.ProposalStatus
 import fr.montemps.domain.workouts.Workout
 import fr.montemps.domain.workouts.WorkoutImport
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.Instant
 
@@ -96,5 +97,19 @@ class WorkoutImportTest {
         assertEquals("Course à pied (Garmin Connect)", WorkoutImport.note(w))
         assertEquals("Course à pied · Sortie longue (Garmin Connect)", WorkoutImport.note(w.copy(title = " Sortie longue ")))
         assertEquals("titre identique au type : pas de répétition", "Course à pied (Garmin Connect)", WorkoutImport.note(w.copy(title = "course à pied")))
+    }
+
+    @Test
+    fun subCategoryIsSuggestedFromTheWorkoutType() {
+        val sport = DefaultActivities.defaultSubs.filter { it.activityId == DefaultActivities.SPORT }
+        assertEquals("sport_running", WorkoutImport.suggestSub("Course à pied", sport))
+        assertEquals("sport_gym", WorkoutImport.suggestSub("Renforcement musculaire", sport))
+        assertEquals("sport_football", WorkoutImport.suggestSub("Football", sport))
+        assertNull("aucune correspondance : sans précision", WorkoutImport.suggestSub("Vélo", sport))
+        val retired = sport.map { if (it.id == "sport_running") it.copy(archived = true) else it }
+        assertNull("sous-catégorie retirée : sans précision", WorkoutImport.suggestSub("Course à pied", retired))
+        val walk = DefaultActivities.defaultSubs.filter { it.activityId == DefaultActivities.DRIVING }
+        assertEquals("randonnée importée en Déplacement", "driving_walk", WorkoutImport.suggestSub("Randonnée", walk))
+        assertNull("activité sans sous-catégorie", WorkoutImport.suggestSub("Course à pied", emptyList()))
     }
 }

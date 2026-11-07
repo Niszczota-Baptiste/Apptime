@@ -1,6 +1,7 @@
 package fr.montemps.domain.workouts
 
 import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import java.time.Duration
 import java.time.Instant
@@ -96,4 +97,24 @@ object WorkoutImport {
     }
 
     private fun close(a: Instant, b: Instant) = Duration.between(a, b).abs() <= SAME_SLOT_TOLERANCE
+
+    /** Mots du type de séance → nom de sous-catégorie (Sport par défaut : Course, Muscu, Foot). */
+    private val subHints = listOf(
+        listOf("course", "running") to listOf("course", "running"),
+        listOf("musculation", "renforcement", "poids du corps") to listOf("muscu", "musculation"),
+        listOf("football") to listOf("foot", "football"),
+        listOf("marche", "randonnée") to listOf("marche", "à pied"),
+        listOf("vélo") to listOf("vélo"),
+        listOf("natation") to listOf("natation"),
+    )
+
+    /**
+     * Sous-catégorie à proposer pour une séance importée dans une activité qui en a : celle dont le
+     * nom correspond au type (« Course à pied » → Course). Aucune correspondance : sans précision.
+     */
+    fun suggestSub(type: String, subs: List<SubActivity>): String? {
+        val t = type.lowercase()
+        val wanted = subHints.firstOrNull { (keys, _) -> keys.any { it in t } }?.second ?: return null
+        return subs.firstOrNull { !it.archived && it.name.lowercase() in wanted }?.id
+    }
 }

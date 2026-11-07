@@ -29,17 +29,27 @@ surfaces / garmin : widgets, tuile, montre (sorties de refreshOutputs) ; data/he
 | Table | Colonnes principales |
 |-------|----------------------|
 | `activities` | `id` (texte stable), `name`, `color` (ARGB), `icon` (inutilisé), `sort_order`, `archived`, `interruption`, `goal_minutes`, `goal_period` (`day`/`week`) |
-| `sessions` | `id`, `activity_id` → activities (RESTRICT), `start_utc_ms`, `end_utc_ms` (NULL = en cours), `zone_id`, `note`, `start_elapsed_ms`, `start_boot_count`, `source` |
+| `subactivities` | `id` (texte stable), `activity_id` → activities (RESTRICT), `name`, `sort_order`, `archived` |
+| `sessions` | `id`, `activity_id` → activities (RESTRICT), `start_utc_ms`, `end_utc_ms` (NULL = en cours), `zone_id`, `note`, `start_elapsed_ms`, `start_boot_count`, `source`, `sub_id` (NULL = sans précision) |
 
 - Intervalles **semi-ouverts** `[début, fin)` : une session peut commencer à l'instant exact où la
   précédente se termine (changement A → B sans trou ni chevauchement).
-- **Triggers SQLite** (défense en profondeur) : refus d'une seconde session active et d'une fin
-  ≤ début, même si la logique applicative était contournée.
+- **Triggers SQLite** (défense en profondeur) : refus d'une seconde session active, d'une fin
+  ≤ début et d'une sous-catégorie qui n'appartient pas à l'activité de la session
+  (`invalid_sub`), même si la logique applicative était contournée.
 - Identifiants d'activités par défaut : `work`, `driving`, `break`, `meal`, `korean`, `sport`,
-  `writing`, `music`, `free_time`, `other`. Activités créées : UUID.
+  `writing`, `music`, `free_time`, `other`, `sleep`. Activités créées : UUID. Sous-catégories par
+  défaut : `work_perso`, `work_pro`, `break_youtube`, `break_game`, `break_other`, `sport_gym`,
+  `sport_football`, `sport_running`, `sport_other`, `writing_write`, `writing_read`,
+  `music_composition`, `music_play`, `driving_car`, `driving_walk`, `driving_transit`,
+  `driving_other` ; créées ensuite : UUID.
 - Schéma Room exporté dans `app/schemas/` (base des migrations). **Version 2** : `interruption`,
   `goal_minutes`, `goal_period` (migration `MIGRATION_1_2` : données conservées, Pause et Repas
-  deviennent des interruptions ; testée sur une base créée avec le schéma v1).
+  deviennent des interruptions). **Version 3** : table `subactivities` et `sessions.sub_id`
+  (migration `MIGRATION_2_3` : sessions existantes « sans précision », sous-catégories par défaut
+  ajoutées aux seules activités par défaut encore présentes, Conduite renommée Déplacement si son
+  nom n'avait pas été changé, Sommeil ajoutée sauf si une activité porte déjà ce nom). Les deux
+  migrations sont testées sur des bases créées avec les schémas exportés v1 et v2.
 
 ### Renommage d'une activité
 
@@ -71,7 +81,15 @@ raccourcis mais conserve ses sessions, visibles dans l'historique avec la mentio
     après le début de la session en cours, ou au plus tôt à la fin de la dernière session. La session
     en cours se termine à cet instant ; l'horloge monotone de départ est ramenée d'autant.
 13. **Reprendre** (`ResumeRule`) : pendant une activité marquée « interruption », l'app propose
-    l'activité de la dernière session terminée qui n'est ni archivée ni elle-même une interruption.
+    l'activité de la dernière session terminée qui n'est ni archivée ni elle-même une interruption,
+    **avec sa sous-catégorie** si elle est toujours proposée (sinon sans précision).
+14. **Sous-catégories** (`TimeTracker.switchTo(activité, sous-catégorie)`) : même activité et même
+    sous-catégorie (ou aucune demandée) → `NoChange` ; session en cours **sans** sous-catégorie →
+    elle est **précisée** sur place (`Refined` : même début, pas de découpage) ; autre
+    sous-catégorie → vrai changement (fin et début au même instant). Une sous-catégorie inconnue,
+    retirée ou d'une autre activité est refusée (`INVALID_SUB`). La saisie et la correction
+    (`SessionEditor`) n'acceptent qu'une sous-catégorie de l'activité de la session ; une
+    sous-catégorie retirée reste acceptée sur une session qui l'avait déjà.
 
 ## Temps : instants, fuseaux, horloge monotone
 
@@ -135,6 +153,31 @@ et ne la republie pas pour cette session ; elle réapparaît au changement d'act
 - Pendant une interruption, première action « Reprendre … » (Android n'affiche que 3 actions :
   Reprendre + 1 favorite + Arrêter).
 
+## Sous-catégories
+
+Une activité peut avoir des sous-catégories (Travail : Perso / Pro ; Pause : YouTube / Jeu /
+Autre ; Sport : Muscu / Foot / Course / Autre ; Écriture : Écrire / Lire ; Musique : Composition /
+Jouer ; Déplacement : Voiture / À pied / Transports / Autre). Choix :
+
+- **Table à part, identifiants stables** : renommer une sous-catégorie renomme son historique
+  (comme une activité) ; la « retirer » l'archive (elle disparaît des choix, l'historique la garde ;
+  la recréer sous le même nom la rétablit avec son identifiant). Aucune suppression.
+- **Facultatives** : `sub_id` NULL = « Sans précision ». Une activité sans sous-catégorie démarre
+  toujours d'un appui ; avec, l'appui ouvre le choix (`SubChooserDialog`), « Sans précision »
+  compris. L'appui long (« Démarrer plus tôt ») choisit d'abord la sous-catégorie.
+- **Nom affiché** : « Travail · Pro » (`displayName`) partout où la session en cours apparaît
+  (écran Aujourd'hui, historique, notification, widgets, tuile, montre).
+- **Surfaces rapides** : les favorites de la notification et la tuile démarrent sans précision
+  (pas de place pour un second choix) ; « Reprendre » reprend la sous-catégorie. Le widget
+  « Activités » ouvre l'app sur le choix (`MainActivity`, extra `choose_activity`) pour une
+  activité qui en a : cet extra ne fait qu'ouvrir le choix, rien ne démarre sans appui de
+  l'utilisateur (aucun nouveau composant exporté). La montre a son propre sous-menu.
+- **Bilans** : chaque activité est détaillée par sous-catégorie (« sans précision » à part),
+  seulement si l'une de ses sessions en a une. Export CSV : colonne `sous_categorie`.
+- **Import des séances** : la sous-catégorie est attribuée d'après le type de séance (course →
+  Course, musculation ou renforcement → Muscu, football → Foot ; sinon sans précision), et reste
+  modifiable ensuite dans l'historique.
+
 ## Notifications programmées (facultatives)
 
 | Notification | Canal | Déclenchement | Une seule fois… |
@@ -142,11 +185,36 @@ et ne la republie pas pour cette session ; elle réapparaît au changement d'act
 | Session longue | Rappels | début + seuil (10 h) | par session |
 | « Rien n'est suivi » (désactivé par défaut) | Rappels | fin de la dernière session (ou début de plage, ou dernière ouverture de l'app) + délai, dans la plage horaire | par période d'inactivité |
 | Résumé du soir (désactivé par défaut) | Résumés (silencieux) | heure choisie, si quelque chose a été suivi | par jour |
+| Coucher automatique (désactivé par défaut) | Coucher et réveil (silencieux) | heure et jours choisis : Sommeil démarre, l'activité en cours s'arrête à cette heure | par échéance |
+| Réveil automatique (désactivé par défaut) | Coucher et réveil (silencieux) | heure et jours choisis : Sommeil s'arrête s'il est en cours | par échéance |
 
 Toutes reposent sur des alarmes **inexactes** reprogrammées par `refreshOutputs()` (redémarrage
 compris) ; elles peuvent arriver quelques minutes en retard. Ouvrir l'app fait repartir la période
 d'inactivité (l'utilisateur voit déjà que rien n'est suivi). Démarrer une activité retire le rappel
 d'inactivité. Le résumé ouvre directement les bilans.
+
+### Coucher et réveil automatiques
+
+`notification/SleepController` (échéances calculées par `domain/sleep/SleepSchedule`, Kotlin pur) :
+
+- **Toujours via `TimeTracker`** (`switchToAt` / `stopAt`, source `schedule`) : mêmes règles que
+  partout, et « Annuler » / « Je dors encore » dans la notification passent par `TrackingIntents`
+  → `TrackingActionReceiver` → `TimeTracker.undo` (refusé si quoi que ce soit a changé depuis).
+- **Alarmes inexactes** (comme les autres rappels) : aucune permission « alarmes exactes », aucun
+  service au premier plan ni wake lock. Une alarme en retard applique l'**heure prévue** (Sommeil
+  commence à 23:00 même si l'alarme arrive à 23:07), dans un délai de grâce : 2 h pour le coucher,
+  12 h pour le réveil ; au-delà, l'échéance est abandonnée (une session de Sommeil oubliée est
+  alors signalée comme toute session longue).
+- **Le suivi manuel l'emporte** : si une session a commencé (ou s'est terminée) après l'heure
+  prévue, le démarrage rétroactif est refusé par `TimeTracker` et rien ne change ; le réveil
+  n'arrête que Sommeil, et seulement s'il a commencé avant l'heure du réveil.
+- **Une seule fois par échéance** : l'instant de la dernière échéance traitée est mémorisé.
+  Activer ou modifier un réglage, ou restaurer une sauvegarde, marque « traité jusqu'à
+  maintenant » : jamais de changement rétroactif dû à un réglage.
+- **Activité Sommeil** : l'activité par défaut (`sleep`), sinon une activité nommée « Sommeil » ;
+  désarchivée ou recréée si besoin quand le coucher s'applique.
+- Échéances aux heures locales, jours ISO ; changements d'heure selon `java.time` (heure
+  inexistante décalée, heure ambiguë : premier passage).
 
 ## Bilans enrichis
 
@@ -175,6 +243,10 @@ d'inactivité. Le résumé ouvre directement les bilans.
   jamais sous le doigt.
 - Aucune icône ni émoji n'est affiché (choix de sobriété) : une activité se reconnaît à son nom
   et à sa pastille de couleur. Le champ `icon` reste dans le modèle et les sauvegardes, inutilisé.
+- **Réglages par catégories repliables** (Notification, Activités, Sommeil, Rappels, Écran
+  d'accueil, Montre Garmin, Données) : toutes repliées à l'ouverture ; chaque en-tête résume l'état
+  (« Coucher 23:00 · réveil 07:00 »…) et annonce « Dépliée / Repliée » aux lecteurs d'écran. Les
+  catégories ouvertes sont conservées en quittant l'écran (`rememberSaveable`).
 
 ## Surfaces hors de l'application
 
@@ -187,9 +259,10 @@ et juste après minuit.
 |---------|---------|---------|
 | Notification de suivi | Activité, chronomètre natif, « En cours depuis » | Favorites, Arrêter, ouvrir |
 | Widget « Suivi en cours » (`TrackingWidgetProvider`) | Activité, chronomètre natif, « Depuis… · aujourd'hui » (total animé), favorites | Arrêter, favorites, ouvrir |
-| Widget « Activités » (`ActivitiesWidgetProvider`) | Toutes les activités (autant que la taille permet), l'active en négatif | Changer d'un appui, Arrêter |
+| Widget « Activités » (`ActivitiesWidgetProvider`) | Toutes les activités (autant que la taille permet), l'active en négatif | Changer d'un appui (activité à sous-catégories : ouvre le choix dans l'app), Arrêter |
 | Tuile « Mon Temps » (`TrackingTileService`) | Activité en cours, ou « Reprendre … » | Arrêter / reprendre la dernière activité |
 | Rappel de session longue | « Travail » toujours en cours ? | Continuer / Corriger (ouvre l'app) |
+| Coucher / réveil automatiques | « Sommeil démarré », « Bonjour » + durée | Annuler / Je dors encore, 2 favorites au réveil |
 
 - **Widgets** : RemoteViews classiques, sans bibliothèque. `updatePeriodMillis = 0` : aucune mise à
   jour périodique. Les `Chronometer` sont animés par le lanceur ; leur base est en temps monotone
@@ -215,13 +288,16 @@ et juste après minuit.
 
 - **CSV** : `;` + BOM UTF-8 (Excel/LibreOffice en français), heures locales et UTC, durée en
   secondes et hh:mm:ss, note échappée.
-- **JSON** : `format = "mon-temps-backup"`, `formatVersion = 3`, activités (dont interruption et
-  objectif), sessions, préférences. Les fichiers v1 et v2 restent lisibles (valeurs par défaut ;
-  Pause et Repas redeviennent des interruptions).
+- **CSV** : colonne `sous_categorie` (vide = sans précision).
+- **JSON** : `format = "mon-temps-backup"`, `formatVersion = 4`, activités (dont interruption et
+  objectif), sous-catégories (`subActivities`), sessions (`subId`), préférences (dont coucher et
+  réveil). Les fichiers v1 à v3 restent lisibles (valeurs par défaut ; Pause et Repas redeviennent
+  des interruptions ; sous-catégories par défaut et Sommeil ajoutés comme le fait la migration).
+  Une session dont la sous-catégorie est inconnue ou appartient à une autre activité est refusée.
 - **Restauration** : décodage et validation complète *avant* toute écriture (format, version,
   identifiants, références, dates, fuseaux, chevauchements, au plus une session active, pas de
   futur), puis confirmation, puis remplacement dans **une seule transaction**. Un fichier invalide
-  ne modifie rien.
+  ne modifie rien. Après restauration, coucher et réveil ne s'appliquent qu'aux échéances futures.
 - Sélecteur de documents Android (SAF) : aucune permission de stockage. Sauvegarde cloud
   automatique Android désactivée (`allowBackup=false`) : l'utilisateur garde la maîtrise.
   Le transfert d'appareil à appareil (Android ou outil Xiaomi) est lui aussi exclu
@@ -241,7 +317,8 @@ Détails, installation et protocole : `docs/GARMIN.md`.
   Elle n'a aucune règle métier : le téléphone fait foi. Le chronomètre est calculé sur la montre à
   partir du début de session ; une commande donnée hors ligne garde son heure et le téléphone
   l'applique rétroactivement (`TimeTracker.switchToAt` / `stopAt`) ou la refuse si quelque chose de
-  plus récent a été fait.
+  plus récent a été fait. Les sous-catégories viennent du téléphone (clé `subs` de chaque
+  activité) et s'affichent dans un sous-menu ; la commande porte la sous-catégorie choisie.
 - **Liaison Android** (`garmin/`) : `WatchController` est une sortie de plus de
   `AppContainer.refreshOutputs()` (envoi en arrière-plan, uniquement si l'état change ; la partie
   « horloge » est exclue de la comparaison). Les messages de la montre deviennent des

@@ -9,6 +9,7 @@ import android.graphics.Canvas
 import android.view.View
 import android.widget.FrameLayout
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasClickAction
@@ -82,23 +83,23 @@ class ScreenshotTest {
         e.addPastSession(DefaultActivities.KOREAN, at("2026-11-02T07:00"), at("2026-11-02T07:35"), null)
         e.addPastSession(DefaultActivities.KOREAN, at("2026-11-04T07:00"), at("2026-11-04T07:30"), null)
         // Semaine en cours (lundi 2 → mercredi 4 novembre), dont une session qui traverse minuit.
-        e.addPastSession(DefaultActivities.WORK, at("2026-11-02T08:30"), at("2026-11-02T12:15"), null)
+        e.addPastSession(DefaultActivities.WORK, at("2026-11-02T08:30"), at("2026-11-02T12:15"), null, subId = "work_pro")
         e.addPastSession(DefaultActivities.MEAL, at("2026-11-02T12:15"), at("2026-11-02T13:00"), null)
-        e.addPastSession(DefaultActivities.WORK, at("2026-11-02T13:00"), at("2026-11-02T17:40"), null)
-        e.addPastSession(DefaultActivities.SPORT, at("2026-11-02T18:30"), at("2026-11-02T19:30"), null)
+        e.addPastSession(DefaultActivities.WORK, at("2026-11-02T13:00"), at("2026-11-02T17:40"), null, subId = "work_pro")
+        e.addPastSession(DefaultActivities.SPORT, at("2026-11-02T18:30"), at("2026-11-02T19:30"), null, subId = "sport_running")
         e.addPastSession(DefaultActivities.KOREAN, at("2026-11-03T07:00"), at("2026-11-03T07:30"), "Vocabulaire")
         e.addPastSession(DefaultActivities.WORK, at("2026-11-03T09:00"), at("2026-11-03T17:00"), null)
-        e.addPastSession(DefaultActivities.MUSIC, at("2026-11-03T20:00"), at("2026-11-03T21:00"), null)
+        e.addPastSession(DefaultActivities.MUSIC, at("2026-11-03T20:00"), at("2026-11-03T21:00"), null, subId = "music_play")
         e.addPastSession(DefaultActivities.FREE_TIME, at("2026-11-03T22:30"), at("2026-11-04T00:30"), "Film")
-        e.addPastSession(DefaultActivities.DRIVING, at("2026-11-04T07:40"), at("2026-11-04T08:10"), null)
-        e.addPastSession(DefaultActivities.WORK, at("2026-11-04T08:10"), at("2026-11-04T12:00"), null)
+        e.addPastSession(DefaultActivities.DRIVING, at("2026-11-04T07:40"), at("2026-11-04T08:10"), null, subId = "driving_car")
+        e.addPastSession(DefaultActivities.WORK, at("2026-11-04T08:10"), at("2026-11-04T12:00"), null, subId = "work_pro")
         e.addPastSession(DefaultActivities.MEAL, at("2026-11-04T12:00"), at("2026-11-04T12:45"), null)
-        e.addPastSession(DefaultActivities.WORK, at("2026-11-04T12:45"), at("2026-11-04T15:00"), "Rapport mensuel")
-        e.addPastSession(DefaultActivities.BREAK, at("2026-11-04T15:00"), at("2026-11-04T15:20"), null)
+        e.addPastSession(DefaultActivities.WORK, at("2026-11-04T12:45"), at("2026-11-04T15:00"), "Rapport mensuel", subId = "work_pro")
+        e.addPastSession(DefaultActivities.BREAK, at("2026-11-04T15:00"), at("2026-11-04T15:20"), null, subId = "break_youtube")
         if (withActive) {
             val now = time.now
             time.now = at("2026-11-04T15:20")
-            c.tracker.switchTo(DefaultActivities.WORK)
+            c.tracker.switchTo(DefaultActivities.WORK, subId = "work_perso")
             time.now = at("2026-11-04T15:20")
             time.advance(java.time.Duration.between(time.now, now)) // horloges calendaire et monotone cohérentes
         }
@@ -183,7 +184,7 @@ class ScreenshotTest {
         shot("01-aujourdhui")
         tap("Historique")
         shot("03-historique")
-        tapOn(androidx.compose.ui.test.hasContentDescription("Travail, de 12:45", substring = true))
+        tapOn(androidx.compose.ui.test.hasContentDescription("Travail · Pro, de 12:45", substring = true))
         shot("04-modifier-session")
         tap("Enregistrer") // aucune modification : retour à l'historique
         tap("Bilans")
@@ -191,7 +192,8 @@ class ScreenshotTest {
         tap("Semaine")
         shot("06-bilan-semaine")
         tap("Réglages")
-        shot("07-reglages")
+        shot("07-reglages") // catégories repliées
+        tap("Activités")
         tap("Gérer les activités")
         shot("08-activites")
     }
@@ -219,10 +221,92 @@ class ScreenshotTest {
         val sport = androidx.compose.ui.test.hasContentDescription("Sport") and hasClickAction()
         rule.waitUntil(5_000) { rule.onAllNodes(sport).fetchSemanticsNodes().isNotEmpty() }
         rule.onAllNodes(sport).onFirst().performTouchInput { longClick() }
+        shotDialog("22a-demarrer-plus-tot-sous-categorie")
+        tap("Course")
         shotDialog("22-demarrer-plus-tot")
         tap("Il y a 10 min")
         rule.waitUntil(5_000) { rule.onAllNodes(hasText("Annuler")).fetchSemanticsNodes().isNotEmpty() }
         shot("23-annuler")
+    }
+
+    /** Un appui sur une activité à sous-catégories ouvre le choix ; le choix démarre la session. */
+    @Test
+    fun tapOpensTheSubCategoryChoice() {
+        seed()
+        launch()
+        tapOn(androidx.compose.ui.test.hasContentDescription("Sport") and hasClickAction())
+        shotDialog("29-choix-sous-categorie")
+        tap("Muscu")
+        rule.waitUntil(5_000) { runBlocking { c.tracker.currentSession()?.subId == "sport_gym" } }
+        shot("30-aujourdhui-sous-categorie")
+    }
+
+    /** Gestion des sous-catégories d'une activité (Activités → Travail → Gérer). */
+    @Test
+    fun subCategoryManager() {
+        seed()
+        launch()
+        tap("Réglages")
+        tap("Activités")
+        tap("Gérer les activités")
+        // Le champ « Nom » de la boîte de dialogue prend le focus (mode non tactile du simulateur) :
+        // horloge des animations figée, puis clic sans attendre que l'interface soit « au repos ».
+        rule.mainClock.autoAdvance = false
+        tap("Travail")
+        rule.mainClock.advanceTimeBy(1_500)
+        clickWithoutSync("Gérer")
+        rule.mainClock.advanceTimeBy(1_500)
+        shotNow("31-gerer-sous-categories")
+    }
+
+    /**
+     * Clic par l'action sémantique du nœud (fusionné) qui affiche [text], dans les fenêtres
+     * ouvertes, sans la synchronisation Compose des tests (impossible tant qu'un curseur clignote).
+     */
+    private fun clickWithoutSync(text: String) {
+        ShadowLooper.idleMainLooper()
+        fun composeRoots(v: View): List<androidx.compose.ui.platform.ViewRootForTest> = when (v) {
+            is androidx.compose.ui.platform.ViewRootForTest -> listOf(v)
+            is android.view.ViewGroup -> (0 until v.childCount).flatMap { composeRoots(v.getChildAt(it)) }
+            else -> emptyList()
+        }
+        fun walk(n: androidx.compose.ui.semantics.SemanticsNode): Sequence<androidx.compose.ui.semantics.SemanticsNode> =
+            sequenceOf(n) + n.children.asSequence().flatMap { walk(it) }
+        val node = rootViews().reversed().flatMap(::composeRoots).asSequence()
+            .flatMap { walk(it.semanticsOwner.rootSemanticsNode) }
+            .first { n ->
+                n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.any { it.text == text } == true &&
+                    androidx.compose.ui.semantics.SemanticsActions.OnClick in n.config
+            }
+        node.config[androidx.compose.ui.semantics.SemanticsActions.OnClick].action!!.invoke()
+    }
+
+    /** Notifications du coucher et du réveil automatiques, telles que construites par Android. */
+    @Test
+    fun sleepNotificationsRendering() {
+        val bedtime = c.notifier.buildSleep(
+            fr.montemps.notification.SleepContent(
+                "Sommeil démarré",
+                "Depuis 23:15 · bonne nuit.",
+                "Annuler",
+                fr.montemps.domain.UndoToken(2, 1, Instant.EPOCH),
+            ),
+            TrackingNotifier.BEDTIME_ID,
+        )
+        val b = Notification.Builder.recoverBuilder(context(), bedtime)
+        renderRemoteViews(b.createBigContentView() ?: b.createContentView(), "32-notification-coucher")
+        val wake = c.notifier.buildSleep(
+            fr.montemps.notification.SleepContent(
+                "Bonjour",
+                "Sommeil : 7 h 30 (23:15 – 06:45).",
+                "Je dors encore",
+                fr.montemps.domain.UndoToken(null, 2, Instant.EPOCH),
+                listOf(fr.montemps.notification.FavoriteAction("work", "Travail"), fr.montemps.notification.FavoriteAction("break", "Pause")),
+            ),
+            TrackingNotifier.WAKE_ID,
+        )
+        val w = Notification.Builder.recoverBuilder(context(), wake)
+        renderRemoteViews(w.createBigContentView() ?: w.createContentView(), "33-notification-reveil")
     }
 
     /** Historique : période non suivie → saisie préremplie. */
@@ -251,9 +335,17 @@ class ScreenshotTest {
         runBlocking {
             c.preferences.setIdleReminder(true)
             c.preferences.setEveningSummary(true)
+            c.preferences.setBedtime(true)
+            c.preferences.setBedtimeMinutes(23 * 60 + 15)
+            c.preferences.setWake(true)
+            c.preferences.setWakeMinutes(6 * 60 + 45)
+            c.preferences.setWakeDays(setOf(1, 2, 3, 4, 5))
         }
         launch()
         tap("Réglages")
+        tap("Notification")
+        tap("Sommeil")
+        tap("Rappels")
         shot("07b-reglages-page-entiere")
     }
 
@@ -272,8 +364,8 @@ class ScreenshotTest {
         c.watch.setEnabled(true)
         launch()
         tap("Réglages")
-        // Section « Montre Garmin » au-dessus de la section suivante.
-        rule.onNode(hasText("Gérer les activités")).performScrollTo()
+        tap("Montre Garmin")
+        rule.onNode(hasText("Importer les séances sportives")).performScrollTo()
         shot("27-reglages-montre-garmin")
         tap("Importer les séances sportives")
         shot("28-seances-sportives")
@@ -284,6 +376,7 @@ class ScreenshotTest {
         seed()
         launch()
         tap("Réglages")
+        tap("Activités")
         tap("Gérer les activités")
         // Le champ « Nom » de la boîte de dialogue peut recevoir le focus (mode non tactile du
         // simulateur) : son curseur clignote indéfiniment. On fige donc l'horloge des animations.
@@ -438,7 +531,8 @@ class ScreenshotTest {
         }
         canvas.drawRect(0f, 0f, bmp.width.toFloat(), bmp.height.toFloat(), paint)
         canvas.drawBitmap(renderView(awm.getViewFor(trackingId), 380, 190), 16 * d, 92 * d, null)
-        canvas.drawBitmap(renderView(awm.getViewFor(activitiesId), 380, 338), 16 * d, 302 * d, null)
+        // Widget « Activités » assez haut pour les 11 activités par défaut (6 rangées).
+        canvas.drawBitmap(renderView(awm.getViewFor(activitiesId), 380, 392), 16 * d, 302 * d, null)
         save(bmp, name)
     }
 

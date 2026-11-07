@@ -5,7 +5,7 @@ sealed interface TileAction {
     /** Arrêter la session affichée (et seulement elle). */
     data class Stop(val sessionId: Long) : TileAction
 
-    /** Reprendre l'activité de la dernière session. */
+    /** Reprendre l'activité interrompue ou la dernière (avec sa sous-catégorie). */
     data class Resume(val activityId: String) : TileAction
 
     /** Rien à reprendre : ouvrir l'application pour choisir. */
@@ -28,17 +28,18 @@ data class TileModel(
             val resume = state.resumeActivity
             if (active != null && resume != null) {
                 // Pendant une interruption (Pause, Repas…), un appui reprend l'activité précédente.
-                val name = state.activeActivity?.name ?: active.activityId
+                val name = state.activeLabel ?: active.activityId
+                val target = state.resumeLabel ?: resume.name
                 return TileModel(
                     label = name,
-                    subtitle = "Reprendre ${resume.name}",
+                    subtitle = "Reprendre $target",
                     active = true,
-                    description = "$APP_NAME : $name en cours depuis ${state.startLabel}. Toucher pour reprendre ${resume.name}.",
+                    description = "$APP_NAME : $name en cours depuis ${state.startLabel}. Toucher pour reprendre $target.",
                     action = TileAction.Resume(resume.id),
                 )
             }
             if (active != null) {
-                val name = state.activeActivity?.name ?: active.activityId
+                val name = state.activeLabel ?: active.activityId
                 return TileModel(
                     label = name,
                     subtitle = "Depuis ${state.startLabel}",
@@ -49,11 +50,12 @@ data class TileModel(
             }
             val last = state.lastActivity
             return if (last != null) {
+                val target = state.lastLabel ?: last.name
                 TileModel(
                     label = APP_NAME,
-                    subtitle = "Reprendre ${last.name}",
+                    subtitle = "Reprendre $target",
                     active = false,
-                    description = "$APP_NAME : aucun suivi. Toucher pour reprendre ${last.name}.",
+                    description = "$APP_NAME : aucun suivi. Toucher pour reprendre $target.",
                     action = TileAction.Resume(last.id),
                 )
             } else {

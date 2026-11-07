@@ -14,24 +14,38 @@ class MainActivity : ComponentActivity() {
     companion object {
         /** Écran à ouvrir (ex. « reports » depuis le résumé du soir). */
         const val EXTRA_DESTINATION = "destination"
+
+        /** Activité dont proposer les sous-catégories (widget « Activités »). */
+        const val EXTRA_CHOOSE_ACTIVITY = "choose_activity"
     }
 
     private val destination = mutableStateOf<String?>(null)
+    private val chooseActivity = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) destination.value = intent.getStringExtra(EXTRA_DESTINATION)
+        if (savedInstanceState == null) read(intent)
         setContent {
             MonTempsTheme {
-                MonTempsNavHost(destination = destination.value, onDestinationHandled = { destination.value = null })
+                MonTempsNavHost(
+                    destination = destination.value,
+                    onDestinationHandled = { destination.value = null },
+                    chooseActivity = chooseActivity.value,
+                    onChooseHandled = { chooseActivity.value = null },
+                )
             }
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        read(intent)
+    }
+
+    private fun read(intent: Intent) {
         destination.value = intent.getStringExtra(EXTRA_DESTINATION)
+        chooseActivity.value = intent.getStringExtra(EXTRA_CHOOSE_ACTIVITY)
     }
 
     override fun onResume() {

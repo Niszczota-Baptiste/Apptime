@@ -11,7 +11,9 @@ import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import fr.montemps.MonTempsApp
 import fr.montemps.R
+import fr.montemps.MainActivity
 import fr.montemps.domain.model.DefaultActivities.BREAK
+import fr.montemps.domain.model.DefaultActivities.MEAL
 import fr.montemps.domain.model.DefaultActivities.SPORT
 import fr.montemps.domain.model.DefaultActivities.WORK
 import fr.montemps.notification.TrackingActionReceiver
@@ -143,7 +145,7 @@ class SurfacesTest {
         runBlocking { c.tracker.switchTo(WORK) }
         val all = buttons(widgets.getViewFor(id))
         assertEquals(
-            listOf("Travail", "Conduite", "Pause", "Repas", "Coréen", "Sport", "Écriture", "Musique", "Temps libre", "Autre"),
+            listOf("Travail", "Déplacement", "Pause", "Repas", "Coréen", "Sport", "Écriture", "Musique", "Temps libre", "Autre", "Sommeil"),
             all.map { it.text(R.id.widget_button_label) },
         )
         assertEquals("Travail, en cours", all[0].contentDescription)
@@ -154,14 +156,49 @@ class SurfacesTest {
     fun widgetButtonsGoThroughTheSharedTrackingLogic() {
         val id = widgets.createWidget(ActivitiesWidgetProvider::class.java, R.layout.widget_activities)
         runBlocking { c.surfaces.refresh() }
-        click(buttons(widgets.getViewFor(id)).first { it.text(R.id.widget_button_label) == "Sport" })
-        waitFor("Sport démarré") { c.tracker.currentSession()?.activityId == SPORT }
+        click(buttons(widgets.getViewFor(id)).first { it.text(R.id.widget_button_label) == "Repas" })
+        waitFor("Repas démarré") { c.tracker.currentSession()?.activityId == MEAL }
         assertEquals("widget", runBlocking { c.tracker.currentSession() }!!.source)
 
         time.advance(Duration.ofMinutes(5))
         waitFor("widget rafraîchi") { widgets.getViewFor(id).visible(R.id.widget_stop) }
         click(widgets.getViewFor(id).findViewById(R.id.widget_stop))
         waitFor("suivi arrêté") { c.tracker.currentSession() == null }
+    }
+
+    @Test
+    fun anActivityWithSubCategoriesOpensTheChooserInTheApp() {
+        val id = widgets.createWidget(ActivitiesWidgetProvider::class.java, R.layout.widget_activities)
+        runBlocking { c.surfaces.refresh() }
+        val app = shadowOf(context() as Application)
+        val broadcasts = app.broadcastIntents.size
+        assertTrue(buttons(widgets.getViewFor(id)).first { it.text(R.id.widget_button_label) == "Sport" }.performClick())
+        ShadowLooper.idleMainLooper()
+        val opened = app.nextStartedActivity
+        assertEquals(MainActivity::class.java.name, opened.component!!.className)
+        assertEquals(SPORT, opened.getStringExtra(MainActivity.EXTRA_CHOOSE_ACTIVITY))
+        assertEquals("rien ne démarre avant le choix", broadcasts, app.broadcastIntents.size)
+        assertNull(runBlocking { c.tracker.currentSession() })
+    }
+
+    @Test
+    fun surfacesShowTheSubCategoryAndResumeIt() {
+        val id = widgets.createWidget(TrackingWidgetProvider::class.java, R.layout.widget_tracking)
+        runBlocking { c.tracker.switchTo(WORK, subId = "work_pro") }
+        assertEquals("Travail · Pro", widgets.getViewFor(id).text(R.id.widget_title))
+        time.advance(Duration.ofMinutes(30))
+        runBlocking { c.tracker.switchTo(BREAK, subId = "break_youtube") }
+        val v = widgets.getViewFor(id)
+        assertEquals("Pause · YouTube", v.text(R.id.widget_title))
+        assertEquals("Reprendre Travail · Pro", buttons(v).first().text(R.id.widget_button_label))
+        val tile = TileModel.from(runBlocking { c.surfaces.load() })
+        assertEquals("Reprendre Travail · Pro", tile.subtitle)
+        // « Reprendre » depuis le widget : même logique partagée, sous-catégorie comprise.
+        time.advance(Duration.ofMinutes(5))
+        click(buttons(v).first())
+        waitFor("reprise de Travail · Pro") { c.tracker.currentSession()?.subId == "work_pro" }
+        // Le widget est réaligné à la fin du traitement de l'action (refreshOutputs).
+        waitFor("widget rafraîchi") { widgets.getViewFor(id).text(R.id.widget_title) == "Travail · Pro" }
     }
 
     @Test

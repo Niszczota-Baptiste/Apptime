@@ -4,7 +4,9 @@ import fr.montemps.data.prefs.PreferencesRepository
 import fr.montemps.domain.ResumeRule
 import fr.montemps.domain.TrackingStore
 import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
+import fr.montemps.domain.model.displayName
 import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.report.ReportCalculator
 import fr.montemps.domain.time.TimeSource
@@ -33,7 +35,18 @@ data class SurfaceState(
     val trackedToday: Duration,
     /** « 09:15 », « hier 23:10 »… ; null sans session en cours. */
     val startLabel: String?,
-)
+    /** Sous-catégories de la session en cours, de l'activité à reprendre et de la dernière activité. */
+    val activeSub: SubActivity? = null,
+    val resumeSub: SubActivity? = null,
+    val lastSub: SubActivity? = null,
+    /** Sous-catégories proposées (non retirées), par activité, dans l'ordre. */
+    val subsByActivity: Map<String, List<SubActivity>> = emptyMap(),
+) {
+    /** « Travail · Pro » pour la session en cours. */
+    val activeLabel: String? get() = activeActivity?.let { displayName(it.name, activeSub?.name) }
+    val resumeLabel: String? get() = resumeActivity?.let { displayName(it.name, resumeSub?.name) }
+    val lastLabel: String? get() = lastActivity?.let { displayName(it.name, lastSub?.name) }
+}
 
 class SurfaceStateLoader(
     private val store: TrackingStore,
@@ -50,6 +63,10 @@ class SurfaceStateLoader(
         val active = store.activeSession()
         val (from, to) = ReportCalculator.dayBounds(today, zone)
         val recent = store.recentEndedSessions(ResumeRule.LOOKBACK)
+        val subs = store.subActivities()
+        val subsById = subs.associateBy { it.id }
+        val resumeSession = ResumeRule.resumeSession(active, byId, recent)
+        val lastSession = ResumeRule.lastWorkSession(recent, byId, exclude = null)
         return SurfaceState(
             now = now,
             zone = zone,
@@ -57,10 +74,14 @@ class SurfaceStateLoader(
             activeActivity = active?.let { byId[it.activityId] },
             shortcuts = activities.filter { !it.archived }.sortedBy { it.sortOrder },
             favorites = p.favoriteIds.filter { it != active?.activityId }.mapNotNull { byId[it] }.filter { !it.archived },
-            lastActivity = ResumeRule.lastWorkActivity(recent, byId, exclude = null),
-            resumeActivity = ResumeRule.resumeTarget(active, byId, recent),
+            lastActivity = lastSession?.let { byId[it.activityId] },
+            resumeActivity = resumeSession?.let { byId[it.activityId] },
             trackedToday = ReportCalculator.report(store.sessionsOverlapping(from, to), from, to, now).tracked,
             startLabel = active?.let { Fmt.startLabel(it.start, today, zone) },
+            activeSub = active?.subId?.let { subsById[it] },
+            resumeSub = ResumeRule.usableSub(resumeSession, subsById),
+            lastSub = ResumeRule.usableSub(lastSession, subsById),
+            subsByActivity = subs.filter { !it.archived }.groupBy { it.activityId }.mapValues { (_, l) -> l.sortedBy { it.sortOrder } },
         )
     }
 }

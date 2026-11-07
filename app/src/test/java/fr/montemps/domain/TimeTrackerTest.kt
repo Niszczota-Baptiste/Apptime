@@ -35,7 +35,7 @@ class TimeTrackerTest {
     fun defaultActivitiesAreSeeded() = runBlocking {
         val names = c.store.activities().map { it.name }
         assertEquals(
-            listOf("Travail", "Conduite", "Pause", "Repas", "Coréen", "Sport", "Écriture", "Musique", "Temps libre", "Autre"),
+            listOf("Travail", "Déplacement", "Pause", "Repas", "Coréen", "Sport", "Écriture", "Musique", "Temps libre", "Autre", "Sommeil"),
             names,
         )
     }

@@ -49,11 +49,15 @@ class Link {
     }
 
     // Commande de l'utilisateur : affichée tout de suite, mise en file, envoyée dès que possible.
-    function command(cmd as String, id as String?) as Void {
-        Model.applyLocally(cmd, id);
+    // [sub] : sous-catégorie choisie (« Pro » pour Travail…), ou null.
+    function command(cmd as String, id as String?, sub as String?) as Void {
+        Model.applyLocally(cmd, id, sub);
         var c = {"v" => 1, "c" => cmd, "at" => Model.now()} as Dictionary;
         if (id != null) {
             c["id"] = id;
+        }
+        if (sub != null) {
+            c["sub"] = sub;
         }
         var q = Model.queue();
         q.add(c);

@@ -32,6 +32,23 @@ data class TrackedActivity(
     val goal: Goal? = null,
 )
 
+/**
+ * Sous-catégorie d'une activité : Travail → Pro / Perso, Sport → Course… Identifiant stable
+ * (les sessions y font référence), nom affichable ; une sous-catégorie retirée est archivée
+ * (l'historique la garde). Elle n'a pas de couleur propre : celle de l'activité.
+ */
+data class SubActivity(
+    val id: String,
+    val activityId: String,
+    val name: String,
+    val sortOrder: Int,
+    val archived: Boolean = false,
+)
+
+/** Nom affiché d'une session : « Travail » ou « Travail · Pro ». */
+fun displayName(activityName: String, subName: String?): String =
+    if (subName.isNullOrBlank()) activityName else "$activityName · $subName"
+
 enum class GoalPeriod(val id: String) {
     DAY("day"),
     WEEK("week"),
@@ -71,6 +88,8 @@ data class Session(
     val startElapsedRealtimeMs: Long? = null,
     val startBootCount: Int? = null,
     val source: String = CommandSource.App.id,
+    /** Sous-catégorie facultative (« Pro » pour Travail…) ; null = sans précision. */
+    val subId: String? = null,
 ) {
     val isActive: Boolean get() = end == null
 
@@ -93,6 +112,8 @@ sealed class CommandSource(val id: String) {
     data object Watch : CommandSource("watch")
     /** Séance importée depuis Health Connect (ex. enregistrée par la montre). */
     data object HealthImport : CommandSource("healthconnect")
+    /** Coucher ou réveil automatique (Réglages → Sommeil). */
+    data object Schedule : CommandSource("schedule")
     /** Future application compagnon identifiée par son nom de paquet. */
     data class External(val packageName: String) : CommandSource("external:$packageName")
 

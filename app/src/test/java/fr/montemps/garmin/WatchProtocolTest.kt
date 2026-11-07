@@ -8,6 +8,7 @@ import fr.montemps.surfaces.SurfaceState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Duration
 import java.time.Instant
@@ -106,6 +107,46 @@ class WatchProtocolTest {
         assertEquals("work", (onBreak["r"] as Map<*, *>)["id"])
         assertNull(onBreak["l"])
         assertEquals("Activité archivée", onBreak["msg"])
+    }
+
+    @Test
+    fun subCategoriesTravelBothWays() {
+        // Montre → téléphone : sous-catégorie choisie dans le sous-menu.
+        assertEquals(WatchCommand.Switch("work", null, "work_pro"), parse(mapOf("c" to "switch", "id" to "work", "sub" to "work_pro")))
+        assertEquals("sous-catégorie vide ignorée", WatchCommand.Switch("work"), parse(mapOf("c" to "switch", "id" to "work", "sub" to " ")))
+
+        // Téléphone → montre : nom complet, identifiant de la sous-catégorie, sous-menus.
+        val subs = DefaultActivities.defaultSubs.groupBy { it.activityId }
+        val pro = subs.getValue("work").first { it.id == "work_pro" }
+        val youtube = subs.getValue("break").first { it.id == "break_youtube" }
+        val onBreak = state(pause, resume = work).let {
+            it.copy(active = it.active!!.copy(subId = youtube.id), activeSub = youtube, resumeSub = pro, subsByActivity = subs)
+        }
+        val m = WatchProtocol.encode(onBreak)
+        val a = m["a"] as Map<*, *>
+        assertEquals("Pause · YouTube", a["n"])
+        assertEquals("break_youtube", a["sub"])
+        assertEquals("work", (m["r"] as Map<*, *>)["id"])
+        assertEquals("Travail · Pro", (m["r"] as Map<*, *>)["n"])
+        assertEquals("sous-catégorie reprise", "work_pro", (m["r"] as Map<*, *>)["sub"])
+        val acts = (m["acts"] as List<*>).map { it as Map<*, *> }.associateBy { it["id"] }
+        assertEquals(listOf(mapOf("id" to "work_perso", "n" to "Perso"), mapOf("id" to "work_pro", "n" to "Pro")), acts.getValue("work")["subs"])
+        assertEquals("Muscu, Foot, Course, Autre", (acts.getValue("sport")["subs"] as List<*>).joinToString { (it as Map<*, *>)["n"].toString() })
+        assertTrue(
+            "aucune clé « subs » sans sous-catégorie",
+            (WatchProtocol.encode(state(work))["acts"] as List<*>).none { (it as Map<*, *>).containsKey("subs") },
+        )
+
+        // Changer de sous-catégorie ou en renommer une : un nouvel état part.
+        val game = subs.getValue("break").first { it.id == "break_game" }
+        assertNotEquals(
+            WatchProtocol.fingerprint(onBreak),
+            WatchProtocol.fingerprint(onBreak.copy(active = onBreak.active!!.copy(subId = game.id), activeSub = game)),
+        )
+        assertNotEquals(
+            WatchProtocol.fingerprint(onBreak),
+            WatchProtocol.fingerprint(onBreak.copy(subsByActivity = subs + ("work" to listOf(pro.copy(name = "Boulot"))))),
+        )
     }
 
     @Test

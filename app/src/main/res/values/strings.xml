@@ -31,4 +31,6 @@
     <string name="widget_idle_time">0:00</string>
     <string name="widget_stop">Arrêter</string>
     <string name="tile_label">Mon Temps</string>
+    <string name="sleep_channel_name">Coucher et réveil</string>
+    <string name="sleep_channel_description">Sommeil démarré ou arrêté automatiquement (Réglages → Sommeil). Silencieux.</string>
 </resources>

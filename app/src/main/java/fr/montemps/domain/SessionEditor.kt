@@ -28,10 +28,12 @@ class SessionEditor(
         end: Instant,
         note: String?,
         source: CommandSource = CommandSource.Manual,
+        subId: String? = null,
     ): EditResult {
         val result = lock.withLock {
             store.transaction {
                 validateActivity(activityId)?.let { return@transaction EditResult.Invalid(it) }
+                validateSub(subId, activityId)?.let { return@transaction EditResult.Invalid(it) }
                 val now = time.now()
                 SessionValidator.validateCompleted(start, end, now)?.let { return@transaction EditResult.Invalid(it) }
                 overlap(start, end, excludeId = null)?.let { return@transaction EditResult.Invalid(it) }
@@ -42,6 +44,7 @@ class SessionEditor(
                     zoneId = time.zone().id,
                     note = note.normalized(),
                     source = source.id,
+                    subId = subId,
                 )
                 EditResult.Saved(session.copy(id = store.insertSession(session)))
             }
@@ -51,23 +54,32 @@ class SessionEditor(
     }
 
     /**
-     * Modifie une session. Pour une session terminée : activité, début, fin, note. Pour la session
-     * active : seulement l'activité et la note (le début est verrouillé dans cette version ; pour le
-     * corriger, arrêter le suivi puis modifier la session terminée).
+     * Modifie une session. Pour une session terminée : activité, sous-catégorie, début, fin, note.
+     * Pour la session active : seulement l'activité, la sous-catégorie et la note (le début est
+     * verrouillé dans cette version ; pour le corriger, arrêter le suivi puis modifier la session
+     * terminée).
      */
-    suspend fun updateSession(id: Long, activityId: String, start: Instant, end: Instant?, note: String?): EditResult {
+    suspend fun updateSession(
+        id: Long,
+        activityId: String,
+        start: Instant,
+        end: Instant?,
+        note: String?,
+        subId: String? = null,
+    ): EditResult {
         val result = lock.withLock {
             store.transaction {
                 val existing = store.session(id) ?: return@transaction EditResult.Invalid(SessionError.NotFound)
                 validateActivity(activityId, allowArchivedId = existing.activityId)?.let { return@transaction EditResult.Invalid(it) }
+                validateSub(subId, activityId, allowArchivedId = existing.subId)?.let { return@transaction EditResult.Invalid(it) }
                 val updated = if (existing.isActive) {
                     if (start != existing.start || end != null) return@transaction EditResult.Invalid(SessionError.ActiveStartLocked)
-                    existing.copy(activityId = activityId, note = note.normalized())
+                    existing.copy(activityId = activityId, note = note.normalized(), subId = subId)
                 } else {
                     val newEnd = end ?: return@transaction EditResult.Invalid(SessionError.MissingEnd)
                     SessionValidator.validateCompleted(start, newEnd, time.now())?.let { return@transaction EditResult.Invalid(it) }
                     overlap(start, newEnd, excludeId = id)?.let { return@transaction EditResult.Invalid(it) }
-                    existing.copy(activityId = activityId, start = start, end = end, note = note.normalized())
+                    existing.copy(activityId = activityId, start = start, end = end, note = note.normalized(), subId = subId)
                 }
                 store.updateSession(updated)
                 EditResult.Saved(updated)
@@ -90,6 +102,15 @@ class SessionEditor(
     private suspend fun validateActivity(activityId: String, allowArchivedId: String? = null): SessionError? {
         val activity = store.activity(activityId) ?: return SessionError.UnknownActivity
         if (activity.archived && activity.id != allowArchivedId) return SessionError.UnknownActivity
+        return null
+    }
+
+    /** La sous-catégorie doit appartenir à l'activité ; une retirée n'est acceptée que si elle était déjà là. */
+    private suspend fun validateSub(subId: String?, activityId: String, allowArchivedId: String? = null): SessionError? {
+        if (subId == null) return null
+        val sub = store.subActivity(subId) ?: return SessionError.InvalidSub
+        if (sub.activityId != activityId) return SessionError.InvalidSub
+        if (sub.archived && sub.id != allowArchivedId) return SessionError.InvalidSub
         return null
     }
 

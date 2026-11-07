@@ -117,9 +117,11 @@ class WorkoutImportViewModel(private val c: AppContainer) : ViewModel() {
         val refused = mutableListOf<String>()
         val byId = s.activities.associateBy { it.id }
         val zone = c.time.zone()
+        val targetSubs = c.store.subActivities().filter { it.activityId == target }
         for (p in chosen.sortedBy { it.workout.start }) {
             val w = p.workout
-            when (val r = c.editor.addPastSession(target, w.start, w.end, WorkoutImport.note(w), CommandSource.HealthImport)) {
+            val sub = WorkoutImport.suggestSub(w.type, targetSubs)
+            when (val r = c.editor.addPastSession(target, w.start, w.end, WorkoutImport.note(w), CommandSource.HealthImport, sub)) {
                 is EditResult.Saved -> added++
                 is EditResult.Invalid -> refused += "${w.type} : ${r.error.message(byId, zone)}"
             }

@@ -34,6 +34,15 @@ data class AppPreferences(
     /** Résumé du soir (désactivé par défaut), heure en minutes depuis minuit. */
     val eveningSummaryEnabled: Boolean = false,
     val eveningSummaryMinutes: Int = 21 * 60,
+    /** Coucher automatique : Sommeil démarre à cette heure (désactivé par défaut). */
+    val bedtimeEnabled: Boolean = false,
+    val bedtimeMinutes: Int = 23 * 60,
+    /** Jours concernés, ISO 1 = lundi … 7 = dimanche (jour où l'on se couche). */
+    val bedtimeDays: Set<Int> = ALL_DAYS,
+    /** Réveil automatique : Sommeil s'arrête à cette heure (désactivé par défaut). */
+    val wakeEnabled: Boolean = false,
+    val wakeMinutes: Int = 7 * 60,
+    val wakeDays: Set<Int> = ALL_DAYS,
 
     // --- États transitoires (jamais sauvegardés) ---
     /** Session pour laquelle l'utilisateur a déjà répondu « Continuer ». */
@@ -47,6 +56,9 @@ data class AppPreferences(
     val idleShownStartMs: Long? = null,
     /** Jour (epochDay) du dernier résumé du soir publié. */
     val summaryShownEpochDay: Long? = null,
+    /** Dernières échéances de coucher et de réveil déjà traitées (jamais deux fois la même). */
+    val bedtimeHandledMs: Long? = null,
+    val wakeHandledMs: Long? = null,
 
     // --- Propres à l'appareil (jamais sauvegardés) ---
     /** Dossier choisi pour la sauvegarde automatique (URI d'arborescence SAF). */
@@ -59,6 +71,11 @@ data class AppPreferences(
         const val MAX_FAVORITES = 2
         val thresholdChoices = listOf(4, 6, 8, 10, 12, 16, 24)
         val idleDelayChoices = listOf(1, 2, 3, 4)
+        val ALL_DAYS: Set<Int> = (1..7).toSet()
+
+        fun encodeDays(days: Set<Int>): String = days.filter { it in 1..7 }.sorted().joinToString(",")
+        fun decodeDays(text: String?): Set<Int>? =
+            text?.split(',')?.mapNotNull { it.trim().toIntOrNull() }?.filter { it in 1..7 }?.toSet()
     }
 }
 
@@ -83,6 +100,14 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         val idleSeenAt = longPreferencesKey("idle_seen_at")
         val idleShownStart = longPreferencesKey("idle_shown_start")
         val summaryShownDay = longPreferencesKey("summary_shown_day")
+        val bedtimeEnabled = booleanPreferencesKey("bedtime_enabled")
+        val bedtimeMinutes = intPreferencesKey("bedtime_minutes")
+        val bedtimeDays = stringPreferencesKey("bedtime_days")
+        val wakeEnabled = booleanPreferencesKey("wake_enabled")
+        val wakeMinutes = intPreferencesKey("wake_minutes")
+        val wakeDays = stringPreferencesKey("wake_days")
+        val bedtimeHandled = longPreferencesKey("bedtime_handled")
+        val wakeHandled = longPreferencesKey("wake_handled")
         val backupTree = stringPreferencesKey("auto_backup_tree")
         val backupLast = longPreferencesKey("auto_backup_last")
         val backupAttempt = longPreferencesKey("auto_backup_attempt")
@@ -110,6 +135,14 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
             idleSeenAtMs = p[Keys.idleSeenAt],
             idleShownStartMs = p[Keys.idleShownStart],
             summaryShownEpochDay = p[Keys.summaryShownDay],
+            bedtimeEnabled = p[Keys.bedtimeEnabled] ?: false,
+            bedtimeMinutes = p[Keys.bedtimeMinutes] ?: (23 * 60),
+            bedtimeDays = AppPreferences.decodeDays(p[Keys.bedtimeDays]) ?: AppPreferences.ALL_DAYS,
+            wakeEnabled = p[Keys.wakeEnabled] ?: false,
+            wakeMinutes = p[Keys.wakeMinutes] ?: (7 * 60),
+            wakeDays = AppPreferences.decodeDays(p[Keys.wakeDays]) ?: AppPreferences.ALL_DAYS,
+            bedtimeHandledMs = p[Keys.bedtimeHandled],
+            wakeHandledMs = p[Keys.wakeHandled],
             autoBackupTreeUri = p[Keys.backupTree],
             autoBackupLastMs = p[Keys.backupLast],
             autoBackupLastAttemptMs = p[Keys.backupAttempt],
@@ -137,6 +170,14 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
     }
     suspend fun setEveningSummary(enabled: Boolean) = dataStore.edit { it[Keys.summaryEnabled] = enabled }
     suspend fun setEveningSummaryMinutes(minutes: Int) = dataStore.edit { it[Keys.summaryMinutes] = minutes }
+    suspend fun setBedtime(enabled: Boolean) = dataStore.edit { it[Keys.bedtimeEnabled] = enabled }
+    suspend fun setBedtimeMinutes(minutes: Int) = dataStore.edit { it[Keys.bedtimeMinutes] = minutes }
+    suspend fun setBedtimeDays(days: Set<Int>) = dataStore.edit { it[Keys.bedtimeDays] = AppPreferences.encodeDays(days) }
+    suspend fun setWake(enabled: Boolean) = dataStore.edit { it[Keys.wakeEnabled] = enabled }
+    suspend fun setWakeMinutes(minutes: Int) = dataStore.edit { it[Keys.wakeMinutes] = minutes }
+    suspend fun setWakeDays(days: Set<Int>) = dataStore.edit { it[Keys.wakeDays] = AppPreferences.encodeDays(days) }
+    suspend fun setBedtimeHandled(ms: Long) = dataStore.edit { it[Keys.bedtimeHandled] = ms }
+    suspend fun setWakeHandled(ms: Long) = dataStore.edit { it[Keys.wakeHandled] = ms }
     suspend fun acknowledgeSession(id: Long) = dataStore.edit { it[Keys.ackSession] = id }
     suspend fun setNotificationPermissionAsked() = dataStore.edit { it[Keys.permissionAsked] = true }
     suspend fun setIdleSeenAt(ms: Long) = dataStore.edit { it[Keys.idleSeenAt] = ms }
@@ -165,7 +206,11 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
      * sont reprises ; les états transitoires sont remis à zéro ; la sauvegarde automatique (propre à
      * l'appareil) n'est pas modifiée.
      */
-    suspend fun restore(p: AppPreferences) = dataStore.edit {
+    /**
+     * Remplace les préférences par celles d'une sauvegarde. [restoredAtMs] : coucher et réveil sont
+     * considérés comme traités jusqu'à cet instant (aucun changement rétroactif après restauration).
+     */
+    suspend fun restore(p: AppPreferences, restoredAtMs: Long) = dataStore.edit {
         it[Keys.favorites] = p.favoriteIds.distinct().take(AppPreferences.MAX_FAVORITES).joinToString(",")
         it[Keys.notificationEnabled] = p.notificationEnabled
         it[Keys.hideName] = p.hideNameOnLockScreen
@@ -178,6 +223,14 @@ class PreferencesRepository(private val dataStore: DataStore<Preferences>) {
         it[Keys.idleEnd] = p.idleWindowEndMinutes
         it[Keys.summaryEnabled] = p.eveningSummaryEnabled
         it[Keys.summaryMinutes] = p.eveningSummaryMinutes
+        it[Keys.bedtimeEnabled] = p.bedtimeEnabled
+        it[Keys.bedtimeMinutes] = p.bedtimeMinutes
+        it[Keys.bedtimeDays] = AppPreferences.encodeDays(p.bedtimeDays)
+        it[Keys.wakeEnabled] = p.wakeEnabled
+        it[Keys.wakeMinutes] = p.wakeMinutes
+        it[Keys.wakeDays] = AppPreferences.encodeDays(p.wakeDays)
+        it[Keys.bedtimeHandled] = restoredAtMs
+        it[Keys.wakeHandled] = restoredAtMs
         it.remove(Keys.ackSession)
         it.remove(Keys.dismissedSession)
         it.remove(Keys.idleSeenAt)

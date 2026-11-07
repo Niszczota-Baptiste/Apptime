@@ -1,5 +1,6 @@
 package fr.montemps.surfaces
 
+import android.app.PendingIntent
 import android.content.Context
 import android.os.Bundle
 import android.appwidget.AppWidgetManager
@@ -50,7 +51,7 @@ object WidgetRenderer {
         views.setOnClickPendingIntent(android.R.id.background, TrackingIntents.openApp(context))
         val active = state.active
         if (active != null) {
-            val name = state.activeActivity?.name ?: active.activityId
+            val name = state.activeLabel ?: active.activityId
             val elapsedMs = Duration.between(active.start, state.now).toMillis().coerceAtLeast(0)
             views.setViewVisibility(R.id.widget_dot, View.VISIBLE)
             views.setInt(R.id.widget_dot, "setColorFilter", state.activeActivity?.color ?: GREY)
@@ -86,9 +87,17 @@ object WidgetRenderer {
         val favorites = (listOfNotNull(resume) + state.favorites.filter { it.id != resume?.id }).take(2)
         if (size.showsFavorites && favorites.isNotEmpty()) {
             favorites.forEach {
+                val isResume = it.id == resume?.id
                 views.addView(
                     R.id.widget_favorites,
-                    button(context, it, isActive = false, label = if (it.id == resume?.id) "Reprendre ${it.name}" else it.name),
+                    button(
+                        context,
+                        it,
+                        isActive = false,
+                        label = if (isResume) "Reprendre ${state.resumeLabel ?: it.name}" else it.name,
+                        // Reprendre : l'activité interrompue avec sa sous-catégorie ; favorites : démarrage direct.
+                        click = if (isResume) TrackingIntents.resume(context, CommandSource.Widget) else null,
+                    ),
                 )
             }
             views.setViewVisibility(R.id.widget_favorites, View.VISIBLE)
@@ -114,7 +123,13 @@ object WidgetRenderer {
         views.removeAllViews(R.id.widget_grid)
         items.chunked(columns).forEach { rowItems ->
             val row = RemoteViews(context.packageName, R.layout.widget_row)
-            rowItems.forEach { row.addView(R.id.widget_row, button(context, it, isActive = it.id == active?.activityId)) }
+            rowItems.forEach {
+                // Activité à sous-catégories : l'app s'ouvre sur le choix (Perso / Pro…).
+                val click = if (state.subsByActivity[it.id].isNullOrEmpty()) null else TrackingIntents.chooseSub(context, it.id)
+                val isActive = it.id == active?.activityId
+                val label = if (isActive) state.activeLabel ?: it.name else it.name
+                row.addView(R.id.widget_row, button(context, it, isActive = isActive, label = label, click = click))
+            }
             repeat(columns - rowItems.size) { row.addView(R.id.widget_row, RemoteViews(context.packageName, R.layout.widget_button_spacer)) }
             views.addView(R.id.widget_grid, row)
         }
@@ -122,13 +137,19 @@ object WidgetRenderer {
     }
 
     /** Bouton « pastille + nom ». L'activité en cours est en négatif (fond encre), comme dans l'app. */
-    private fun button(context: Context, activity: TrackedActivity, isActive: Boolean, label: String = activity.name): RemoteViews {
+    private fun button(
+        context: Context,
+        activity: TrackedActivity,
+        isActive: Boolean,
+        label: String = activity.name,
+        click: PendingIntent? = null,
+    ): RemoteViews {
         val layout = if (isActive) R.layout.widget_activity_button_active else R.layout.widget_activity_button
         return RemoteViews(context.packageName, layout).apply {
             setTextViewText(R.id.widget_button_label, label)
             setInt(R.id.widget_button_dot, "setColorFilter", activity.color)
-            setOnClickPendingIntent(R.id.widget_button, TrackingIntents.switchTo(context, activity.id, CommandSource.Widget))
-            setContentDescription(R.id.widget_button, if (isActive) "${activity.name}, en cours" else "Démarrer ${activity.name}")
+            setOnClickPendingIntent(R.id.widget_button, click ?: TrackingIntents.switchTo(context, activity.id, CommandSource.Widget))
+            setContentDescription(R.id.widget_button, if (isActive) "$label, en cours" else "Démarrer $label")
         }
     }
 

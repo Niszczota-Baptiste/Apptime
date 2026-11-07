@@ -31,6 +31,7 @@ import fr.montemps.notification.EveningSummaryController
 import fr.montemps.notification.IdleReminderController
 import fr.montemps.notification.NotificationController
 import fr.montemps.notification.ReminderController
+import fr.montemps.notification.SleepController
 import fr.montemps.notification.TrackingIntents
 import fr.montemps.notification.TrackingNotifier
 import fr.montemps.surfaces.SurfaceStateLoader
@@ -93,6 +94,7 @@ class AppContainer(
         reminders.reschedule()
         idle.reschedule()
         summary.reschedule()
+        sleep.reschedule()
         surfaces.refresh()
         watch.requestSync() // en arrière-plan : la montre peut être lente ou absente
         autoBackup.reschedule() // en dernier : peut écrire un fichier si la sauvegarde est due
@@ -102,6 +104,7 @@ class AppContainer(
     val watchCommands = WatchCommandHandler(tracker, store)
     val editor = SessionEditor(store, time, lock, onChange)
     val catalog = ActivityCatalog(store, lock, onChange)
+    val sleep = SleepController(context, store, preferences, tracker, catalog, notifier, time, alarms)
     val backup = BackupService(store, preferences, lock, time, onChange, BuildConfig.VERSION_NAME)
     val autoBackup = AutoBackupController(preferences, backup, alarms, time, backupFolderFor) { TrackingIntents.autoBackup(context) }
 }

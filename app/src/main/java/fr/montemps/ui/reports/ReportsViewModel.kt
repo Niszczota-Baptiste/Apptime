@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import fr.montemps.AppContainer
 import fr.montemps.domain.model.GoalPeriod
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.domain.report.DailyGoalWeek
 import fr.montemps.domain.report.GoalProgress
@@ -38,6 +39,8 @@ data class ReportsUiState(
     val day: PeriodReport?,
     val week: WeekReport?,
     val activities: Map<String, TrackedActivity>,
+    /** Sous-catégories (noms des lignes de détail). */
+    val subs: Map<String, SubActivity> = emptyMap(),
     /** Objectifs de la période affichée (quotidiens en mode Jour, hebdomadaires en mode Semaine). */
     val goals: List<GoalProgress> = emptyList(),
     /** Mode Semaine : objectifs quotidiens atteints n jours sur les jours écoulés. */
@@ -91,13 +94,14 @@ class ReportsViewModel(private val c: AppContainer) : ViewModel() {
     val state: StateFlow<ReportsUiState?> = combine(
         combine(mode, anchor) { m, a -> m to a },
         sessions,
-        c.store.observeActivities(),
+        combine(c.store.observeActivities(), c.store.observeSubActivities()) { a, s -> a to s },
         streaks,
         displayTicker(c.time, 1_000),
-    ) { (m, a), list, activities, streakList, now ->
+    ) { (m, a), list, (activities, subList), streakList, now ->
         val zone = c.time.zone()
         val today = now.atZone(zone).toLocalDate()
         val byId = activities.associateBy { it.id }
+        val subs = subList.associateBy { it.id }
         if (m == ReportMode.DAY) {
             val day = ReportCalculator.dayReport(list, a, zone, now)
             ReportsUiState(
@@ -107,6 +111,7 @@ class ReportsViewModel(private val c: AppContainer) : ViewModel() {
                 day = day,
                 week = null,
                 activities = byId,
+                subs = subs,
                 goals = Goals.progress(activities, day, GoalPeriod.DAY),
                 streaks = streakList,
             )
@@ -121,6 +126,7 @@ class ReportsViewModel(private val c: AppContainer) : ViewModel() {
                 day = null,
                 week = week,
                 activities = byId,
+                subs = subs,
                 goals = Goals.progress(activities, week.total, GoalPeriod.WEEK),
                 dailyGoalsWeek = Goals.dailyGoalsOverWeek(activities, week),
                 comparison = Trends.compare(week.total, previous),

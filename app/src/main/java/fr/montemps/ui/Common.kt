@@ -52,6 +52,7 @@ fun coverageText(report: PeriodReport): String = when {
 fun TransitionResult.Reason.message(): String = when (this) {
     TransitionResult.Reason.UNKNOWN_ACTIVITY -> "Cette activité n'existe plus."
     TransitionResult.Reason.ARCHIVED_ACTIVITY -> "Cette activité est archivée."
+    TransitionResult.Reason.INVALID_SUB -> "Cette sous-catégorie n'est plus proposée."
     TransitionResult.Reason.CLOCK_BEFORE_LAST_RECORD ->
         "L'heure du téléphone est antérieure à la dernière session enregistrée. Vérifiez l'heure système, puis réessayez."
     TransitionResult.Reason.INVALID_END_TIME -> "L'heure de fin doit être après le début et ne pas être dans le futur."
@@ -65,6 +66,7 @@ fun SessionError.message(activities: Map<String, TrackedActivity>, zone: ZoneId)
     SessionError.EndInFuture -> "Une session passée ne peut pas se terminer dans le futur."
     SessionError.StartInFuture -> "Le début ne peut pas être dans le futur."
     SessionError.UnknownActivity -> "Choisissez une activité valide."
+    SessionError.InvalidSub -> "Choisissez une sous-catégorie de cette activité."
     SessionError.NotFound -> "Cette session n'existe plus."
     SessionError.MissingEnd -> "Indiquez une heure de fin."
     SessionError.ActiveStartLocked ->

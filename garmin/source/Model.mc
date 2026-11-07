@@ -155,9 +155,37 @@ module Model {
         return null;
     }
 
+    // Sous-catégories proposées pour une activité de la liste (« subs »), ou tableau vide.
+    function subsOf(act as Dictionary?) as Array {
+        if (act != null) {
+            var subs = act["subs"];
+            if (subs instanceof Array) {
+                return subs;
+            }
+        }
+        return [] as Array;
+    }
+
+    function subName(act as Dictionary?, subId as String?) as String? {
+        if (subId == null) {
+            return null;
+        }
+        var subs = subsOf(act);
+        for (var i = 0; i < subs.size(); i++) {
+            var sub = subs[i];
+            if (sub instanceof Dictionary) {
+                var sid = sub["id"];
+                if (sid instanceof String && sid.equals(subId)) {
+                    return str(sub, "n");
+                }
+            }
+        }
+        return null;
+    }
+
     // Applique tout de suite une commande à l'état affiché ; le téléphone confirmera (ou
     // corrigera) en renvoyant son état, qui fait foi.
-    function applyLocally(cmd as String, id as String?) as Void {
+    function applyLocally(cmd as String, id as String?, sub as String?) as Void {
         var s = state();
         if (s == null) {
             return;
@@ -178,13 +206,34 @@ module Model {
             if (current == null) {
                 return;
             }
-            s["l"] = {"id" => current["id"], "n" => current["n"], "c" => current["c"]};
+            s["l"] = {"id" => current["id"], "n" => current["n"], "c" => current["c"], "sub" => current["sub"]};
             s["a"] = null;
         } else if (target != null) {
+            var start = t;
             if (current != null && str(current, "id").equals(str(target, "id"))) {
-                return;
+                // Même activité : rien sans sous-catégorie nouvelle ; une session sans
+                // sous-catégorie est seulement précisée (même début).
+                var currentSub = current["sub"];
+                if (sub == null || (currentSub instanceof String && currentSub.equals(sub))) {
+                    return;
+                }
+                if (currentSub == null) {
+                    start = num(current, "s");
+                }
             }
-            s["a"] = {"id" => target["id"], "n" => target["n"], "c" => target["c"], "s" => t, "i" => false};
+            var label = str(target, "n");
+            var newSub = sub;
+            if (cmd.equals("resume")) {
+                // « Reprendre » : le téléphone a déjà mis le nom complet et la sous-catégorie.
+                var rs = target["sub"];
+                newSub = rs instanceof String ? rs : null;
+            } else {
+                var subLabel = subName(target, sub);
+                if (subLabel != null) {
+                    label = label + " · " + subLabel;
+                }
+            }
+            s["a"] = {"id" => target["id"], "n" => label, "c" => target["c"], "s" => start, "i" => false, "sub" => newSub};
             s["l"] = null;
         } else {
             return;

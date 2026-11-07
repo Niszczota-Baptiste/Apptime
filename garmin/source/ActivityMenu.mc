@@ -8,6 +8,37 @@ import Toybox.WatchUi;
 module ActivityMenu {
     const RESUME = "@resume";
     const STOP = "@stop";
+    const NO_SUB = "@nosub";
+
+    // Sous-menu d'une activité à sous-catégories (Travail → Perso / Pro…).
+    function openSubs(link as Link, act as Dictionary) as Void {
+        var s = Model.state();
+        var a = Model.active(s);
+        var actId = Model.str(act, "id");
+        var activityIsActive = a != null && Model.str(a, "id").equals(actId);
+        var currentSub = a != null ? a["sub"] : null;
+        var color = Model.num(act, "c");
+        var h = System.getDeviceSettings().screenHeight;
+        var menu = new WatchUi.CustomMenu(h / 5, Graphics.COLOR_BLACK, {
+            :focusItemHeight => h / 4,
+            :title => new MenuTitle(Model.str(act, "n")),
+        });
+        var subs = Model.subsOf(act);
+        for (var i = 0; i < subs.size(); i++) {
+            var sub = subs[i];
+            if (sub instanceof Dictionary) {
+                var sid = Model.str(sub, "id");
+                if (!sid.equals("")) {
+                    var current = activityIsActive && currentSub instanceof String && currentSub.equals(sid);
+                    menu.addItem(new ActivityItem(sid, Model.str(sub, "n"), color, current ? "En cours" : null));
+                }
+            }
+        }
+        if (!activityIsActive) {
+            menu.addItem(new ActivityItem(NO_SUB, "Sans précision", color, null));
+        }
+        WatchUi.pushView(menu, new SubMenuDelegate(link, actId), WatchUi.SLIDE_LEFT);
+    }
 
     function open(link as Link) as Void {
         var s = Model.state();
@@ -128,9 +159,18 @@ class ActivityMenuDelegate extends WatchUi.Menu2InputDelegate {
                 return;
             }
             if (id.equals(ActivityMenu.RESUME)) {
-                link.command("resume", null);
-            } else if (!id.equals(activeId)) {
-                link.command("switch", id);
+                link.command("resume", null, null);
+            } else {
+                // Activité à sous-catégories : choisir d'abord (la liste reste ouverte derrière).
+                var s = Model.state();
+                var act = s != null ? Model.findActivity(s, id) : null;
+                if (act != null && Model.subsOf(act).size() > 0) {
+                    ActivityMenu.openSubs(link, act);
+                    return;
+                }
+                if (!id.equals(activeId)) {
+                    link.command("switch", id, null);
+                }
             }
         }
         WatchUi.popView(WatchUi.SLIDE_DOWN);
@@ -151,10 +191,35 @@ class StopConfirmation extends WatchUi.ConfirmationDelegate {
 
     function onResponse(response as WatchUi.Confirm) as Boolean {
         if (response == WatchUi.CONFIRM_YES) {
-            link.command("stop", null);
+            link.command("stop", null, null);
             // Fermer aussi la liste : retour direct à l'écran principal.
             WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
         }
         return true;
+    }
+}
+
+// Choix de la sous-catégorie : la commande part, puis les deux listes se ferment.
+class SubMenuDelegate extends WatchUi.Menu2InputDelegate {
+    private var link as Link;
+    private var activityId as String;
+
+    function initialize(l as Link, act as String) {
+        Menu2InputDelegate.initialize();
+        link = l;
+        activityId = act;
+    }
+
+    function onSelect(item as WatchUi.MenuItem) as Void {
+        var id = item.getId();
+        if (id instanceof String) {
+            link.command("switch", activityId, id.equals(ActivityMenu.NO_SUB) ? null : id);
+        }
+        WatchUi.popView(WatchUi.SLIDE_RIGHT);
+        WatchUi.popView(WatchUi.SLIDE_DOWN);
+    }
+
+    function onBack() as Void {
+        WatchUi.popView(WatchUi.SLIDE_RIGHT);
     }
 }

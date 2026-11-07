@@ -63,7 +63,9 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.collectLatest
 import fr.montemps.domain.BackdateLimit
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
+import fr.montemps.domain.model.displayName
 import fr.montemps.domain.report.Fmt
 import fr.montemps.domain.report.PeriodReport
 import fr.montemps.ui.ScreenScaffold
@@ -78,6 +80,7 @@ import fr.montemps.ui.components.PillButton
 import fr.montemps.ui.components.SectionHeader
 import fr.montemps.ui.components.ShareRow
 import fr.montemps.ui.components.StopGlyph
+import fr.montemps.ui.components.SubChooserDialog
 import fr.montemps.ui.components.distributionSegments
 import fr.montemps.ui.components.tabular
 import fr.montemps.ui.coverageText
@@ -88,12 +91,30 @@ import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 
 @Composable
-fun TodayScreen(vm: TodayViewModel, onManageActivities: () -> Unit, onOpenHistory: () -> Unit) {
+fun TodayScreen(
+    vm: TodayViewModel,
+    onManageActivities: () -> Unit,
+    onOpenHistory: () -> Unit,
+    /** Activité dont ouvrir le choix de sous-catégorie (demandé par le widget « Activités »). */
+    pendingChoice: String? = null,
+    onPendingChoiceHandled: () -> Unit = {},
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
-    var backdating by remember { mutableStateOf<TrackedActivity?>(null) }
+    // Activité dont on choisit la sous-catégorie (true : avant « démarrer plus tôt »).
+    var choosing by remember { mutableStateOf<Pair<TrackedActivity, Boolean>?>(null) }
+    // « Démarrer plus tôt » : activité et sous-catégorie choisies.
+    var backdating by remember { mutableStateOf<Pair<TrackedActivity, String?>?>(null) }
+    val loaded = state
+    LaunchedEffect(pendingChoice, loaded != null) {
+        val s = loaded ?: return@LaunchedEffect
+        val id = pendingChoice ?: return@LaunchedEffect
+        val activity = s.activitiesById[id]
+        if (activity != null && !activity.archived && !s.subsByActivity[id].isNullOrEmpty()) choosing = activity to false
+        onPendingChoiceHandled()
+    }
     LaunchedEffect(Unit) {
         // collectLatest : un nouveau changement remplace le message précédent.
         vm.events.collectLatest { e ->
@@ -143,30 +164,59 @@ fun TodayScreen(vm: TodayViewModel, onManageActivities: () -> Unit, onOpenHistor
                 if (!canNotify && !s.notificationPermissionAsked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
-                if (s.active?.activityId != id) haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                vm.onActivityTap(id)
+                val activity = s.activitiesById[id]
+                if (activity != null && !s.subsByActivity[id].isNullOrEmpty()) {
+                    // Sous-catégories : un appui ouvre le choix (Travail → Perso / Pro…).
+                    choosing = activity to false
+                } else {
+                    if (s.active?.activityId != id) haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    vm.start(id, null)
+                }
             },
             onStop = vm::onStop,
-            onLongPress = { backdating = it },
-            onResume = { id ->
+            onLongPress = { a ->
+                if (s.subsByActivity[a.id].isNullOrEmpty()) backdating = a to null else choosing = a to true
+            },
+            onResume = {
                 haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                vm.onActivityTap(id)
+                vm.resume()
             },
             onRequestNotifications = requestNotifications,
             onReshowNotification = vm::reshowNotification,
             onManageActivities = onManageActivities,
             onOpenHistory = onOpenHistory,
         )
-        backdating?.let { activity ->
+        choosing?.let { (activity, forBackdate) ->
+            val activeHere = s.active?.takeIf { it.activityId == activity.id }
+            SubChooserDialog(
+                activity = activity,
+                subs = s.subsByActivity[activity.id].orEmpty(),
+                title = if (forBackdate) "Démarrer « ${activity.name} » plus tôt" else activity.name,
+                currentSubId = activeHere?.subId,
+                activityIsActive = !forBackdate && activeHere != null,
+                onPick = { subId ->
+                    choosing = null
+                    if (forBackdate) {
+                        backdating = activity to subId
+                    } else {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        vm.start(activity.id, subId)
+                    }
+                },
+                onDismiss = { choosing = null },
+            )
+        }
+        backdating?.let { (activity, subId) ->
             BackdateDialog(
                 activity = activity,
+                label = displayName(activity.name, subId?.let { s.subsById[it]?.name }),
                 now = s.now,
                 zone = s.zone,
                 loadLimit = vm::backdateLimit,
                 onPick = { at ->
                     backdating = null
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                    vm.startAt(activity.id, at)
+                    vm.startAt(activity.id, at, subId)
                 },
                 onDismiss = { backdating = null },
             )
@@ -191,7 +241,7 @@ private fun TodayContent(
     onTap: (String) -> Unit,
     onStop: () -> Unit,
     onLongPress: (TrackedActivity) -> Unit,
-    onResume: (String) -> Unit,
+    onResume: () -> Unit,
     onRequestNotifications: () -> Unit,
     onReshowNotification: () -> Unit,
     onManageActivities: () -> Unit,
@@ -253,12 +303,15 @@ private fun TodayContent(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 row.forEach { a ->
+                    val isActive = s.active?.activityId == a.id
                     ActivityTile(
                         activity = a,
-                        isActive = s.active?.activityId == a.id,
+                        isActive = isActive,
                         onClick = { onTap(a.id) },
                         onLongClick = { onLongPress(a) },
                         modifier = Modifier.weight(1f).fillMaxHeight(),
+                        activeSub = if (isActive) s.active?.subId?.let { s.subsById[it]?.name } else null,
+                        hasSubs = !s.subsByActivity[a.id].isNullOrEmpty(),
                     )
                 }
                 repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
@@ -267,7 +320,7 @@ private fun TodayContent(
         item {
             SectionHeader("Aujourd'hui", trailing = if (s.report.isEmpty) null else Fmt.short(s.report.tracked))
         }
-        item { DaySummary(s.report, s.activitiesById) }
+        item { DaySummary(s.report, s.activitiesById, s.subsById) }
         if (s.dailyGoals.isNotEmpty()) {
             item { SectionHeader("Objectifs du jour") }
             items(s.dailyGoals, key = { "goal-" + it.activity.id }) { GoalRow(it) }
@@ -281,7 +334,7 @@ private fun TodayContent(
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Hero(s: TodayUiState, onStop: () -> Unit, onResume: (String) -> Unit) {
+private fun Hero(s: TodayUiState, onStop: () -> Unit, onResume: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val active = s.active
     val timerStyle = MaterialTheme.typography.displayLarge.tabular().copy(textAlign = TextAlign.Center, fontWeight = FontWeight.Light)
@@ -313,7 +366,7 @@ private fun Hero(s: TodayUiState, onStop: () -> Unit, onResume: (String) -> Unit
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { heading() }) {
                 ActivityMarker(activity)
                 Spacer(Modifier.width(8.dp))
-                Text(activity?.name ?: active.activityId, style = MaterialTheme.typography.titleLarge)
+                Text(s.label(active), style = MaterialTheme.typography.titleLarge)
             }
             BasicText(
                 Fmt.hms(elapsed),
@@ -338,7 +391,7 @@ private fun Hero(s: TodayUiState, onStop: () -> Unit, onResume: (String) -> Unit
                     horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    PillButton("Reprendre ${resume.name}", onClick = { onResume(resume.id) }, primary = true)
+                    PillButton("Reprendre ${displayName(resume.name, s.resumeSub?.name)}", onClick = onResume, primary = true)
                     PillButton("Arrêter", onClick = onStop, primary = false, leading = { StopGlyph() })
                 }
             } else {
@@ -349,7 +402,7 @@ private fun Hero(s: TodayUiState, onStop: () -> Unit, onResume: (String) -> Unit
 }
 
 @Composable
-private fun DaySummary(report: PeriodReport, activities: Map<String, TrackedActivity>) {
+private fun DaySummary(report: PeriodReport, activities: Map<String, TrackedActivity>, subs: Map<String, SubActivity>) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     if (report.isEmpty) {
         Text("Rien n'a encore été suivi aujourd'hui.", style = MaterialTheme.typography.bodyMedium, color = muted)
@@ -362,7 +415,7 @@ private fun DaySummary(report: PeriodReport, activities: Map<String, TrackedActi
         Spacer(Modifier.height(12.dp))
         report.totals.forEach { t ->
             val a = activities[t.activityId]
-            ShareRow(a, a?.name ?: t.activityId, t.duration, t.shareOfTracked)
+            ShareRow(a, a?.name ?: t.activityId, t.duration, t.shareOfTracked, t.bySub, subs)
         }
         Spacer(Modifier.height(4.dp))
         Text("Pourcentages calculés sur le temps suivi.", style = MaterialTheme.typography.labelSmall, color = muted)
@@ -376,6 +429,7 @@ private fun DaySummary(report: PeriodReport, activities: Map<String, TrackedActi
 @Composable
 private fun BackdateDialog(
     activity: TrackedActivity,
+    label: String,
     now: Instant,
     zone: ZoneId,
     loadLimit: suspend () -> BackdateLimit,
@@ -396,7 +450,7 @@ private fun BackdateDialog(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Démarrer « ${activity.name} » plus tôt") },
+        title = { Text("Démarrer « $label » plus tôt") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (!custom) {
@@ -410,7 +464,12 @@ private fun BackdateDialog(
                                 .padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(if (minutes == 60) "Il y a 1 h" else "Il y a $minutes min", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Text(
+                                if (minutes == 60) "Il y a 1 h" else "Il y a $minutes min",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                            )
                             Text(Fmt.time(at, zone), style = MaterialTheme.typography.bodyMedium.tabular(), color = muted)
                         }
                     }

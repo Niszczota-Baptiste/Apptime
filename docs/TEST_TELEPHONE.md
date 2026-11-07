@@ -1,8 +1,11 @@
 # Procédure de test sur le Redmi Note 17 Pro 5G (HyperOS 3, Android 16, 6 Go de RAM)
 
-Durée : ≈ 45 min, plus une nuit pour le test long. Noter pour chaque étape : OK / KO + remarque.
+Durée : ≈ 1 h, plus une nuit pour le test long (et le coucher / réveil automatiques, section 25). Noter pour chaque étape : OK / KO + remarque.
 Noter aussi la version exacte d'HyperOS (Paramètres → À propos du téléphone) : l'affichage en haut
 de l'écran (section 20) dépend de la version.
+
+Les Réglages sont groupés en catégories repliées (section 23) : « Réglages → Rappels → … » signifie
+« toucher la catégorie Rappels, puis l'élément ».
 
 Avant de commencer :
 - **Données d'un ancien téléphone** : le transfert Android/Xiaomi ne copie pas les données de
@@ -20,24 +23,27 @@ Avant de commencer :
 
 ## 1. Parcours de base
 1. Ouvrir l'app → « Aucune activité en cours » s'affiche.
-2. Toucher **Travail** → accepter la demande d'autorisation de notification.
-3. Le chronomètre avance ; la tuile Travail affiche « En cours » et une coche.
-4. Toucher **Pause** : un seul appui suffit, Travail s'arrête et Pause démarre (vérifier dans Historique : fin de Travail = début de Pause).
-5. Toucher Pause plusieurs fois rapidement → aucune nouvelle ligne dans l'historique.
+2. Toucher **Travail** → le choix « Perso / Pro / Sans précision » s'ouvre ; choisir **Pro** →
+   accepter la demande d'autorisation de notification.
+3. Le chronomètre avance ; « Travail · Pro » s'affiche ; la tuile Travail affiche « En cours ».
+4. Toucher **Repas** (sans sous-catégorie) : un seul appui suffit, Travail s'arrête et Repas démarre
+   (vérifier dans Historique : fin de Travail = début de Repas).
+5. Toucher Repas plusieurs fois rapidement → aucune nouvelle ligne dans l'historique.
 
 ## 2. Écran éteint pendant le suivi
 1. Démarrer Travail, noter l'heure, éteindre l'écran 20 min.
-2. Rallumer : sur l'écran verrouillé, la notification « 💼 Travail — En cours depuis HH:MM » doit
+2. Rallumer : sur l'écran verrouillé, la notification « Travail · Pro — En cours depuis HH:MM » doit
    être visible **si** HyperOS autorise les notifications de Mon Temps sur l'écran verrouillé
    (sinon : Paramètres → Notifications → écran de verrouillage / Mon Temps ; les intitulés varient).
 3. Le chronomètre de la notification et celui de l'app indiquent ≈ 20 min.
-4. Activer « Masquer le nom sur l'écran verrouillé » (Réglages), verrouiller : seul « Suivi en
+4. Activer « Masquer le nom sur l'écran verrouillé » (Réglages → Notification), verrouiller : seul « Suivi en
    cours » doit apparaître (selon le réglage « contenu sensible » du téléphone).
 
 ## 3. Actions rapides de la notification
-1. Pendant Travail, déployer la notification : actions « ☕ Pause » et « Arrêter » (Travail, déjà
+1. Pendant Travail, déployer la notification : actions « Pause » et « Arrêter » (Travail, déjà
    actif, n'est pas proposé). Noter combien d'actions HyperOS affiche réellement.
-2. Toucher « Pause » → titre de la notification = Pause ; l'app (si ouverte) se met à jour.
+2. Toucher « Pause » → titre de la notification = Pause (sans précision : la notification n'a pas
+   la place d'un second choix) ; l'app (si ouverte) se met à jour.
 3. Toucher « Arrêter » → la notification disparaît ; l'historique montre la session terminée.
 4. Tester les actions depuis l'écran verrouillé (HyperOS peut demander de déverrouiller).
 5. Toucher la notification → l'app s'ouvre.
@@ -88,7 +94,8 @@ Avant de commencer :
 5. Le soir, démarrer Temps libre avant minuit et l'arrêter après : le bilan de chaque jour reçoit sa part.
 
 ## 10. Export / restauration
-1. Réglages → Exporter CSV → ouvrir le fichier sur ordinateur (Excel/LibreOffice) : colonnes séparées, accents corrects.
+1. Réglages → Données → Exporter les sessions → ouvrir le fichier sur ordinateur (Excel/LibreOffice) :
+   colonnes séparées, accents corrects, colonne « sous_categorie » remplie (« Pro »…) ou vide.
 2. Créer une sauvegarde JSON. Modifier quelques données. Restaurer la sauvegarde → confirmation →
    données revenues à l'état sauvegardé.
 3. Tenter de restaurer un fichier quelconque (ex. une photo/texte) → message d'erreur, données intactes.
@@ -105,8 +112,9 @@ Avant de commencer :
    (sinon : appui long sur l'écran d'accueil → Widgets → Mon Temps). Idem pour « Widget Activités ».
 2. Démarrer Travail depuis l'app : les deux widgets se mettent à jour (nom, chronomètre qui avance,
    Travail en négatif dans « Activités »).
-3. Toucher « Pause » dans le widget « Activités » : un seul appui suffit ; app, notification et
-   widgets passent sur Pause.
+3. Toucher « Repas » dans le widget « Activités » : un seul appui suffit ; app, notification et
+   widgets passent sur Repas. Toucher « Pause » : l'app s'ouvre sur le choix YouTube / Jeu / Autre ;
+   choisir YouTube → « Pause · YouTube » partout.
 4. Toucher « Arrêter » dans un widget : le suivi s'arrête partout.
 5. Redimensionner « Suivi en cours » : en petit, nom et chronomètre seulement ; en grand, la ligne
    « Depuis… · aujourd'hui… » et les favorites apparaissent. Agrandir « Activités » : plus d'activités.
@@ -120,24 +128,24 @@ Avant de commencer :
 3. Sans suivi : la tuile propose « Reprendre … » ; un appui reprend la dernière activité.
 
 ## 14. Rappel de session longue
-1. Réglages → Suivi → « Session longue » : choisir 4 h. Démarrer une activité et la laisser tourner.
+1. Réglages → Rappels → « Session longue » : choisir 4 h. Démarrer une activité et la laisser tourner.
 2. Après environ 4 h (l'alarme peut être un peu retardée) : notification « « … » toujours en cours ? »
    avec « Continuer » et « Corriger ». Un seul rappel pour cette session.
 3. « Continuer » : la notification disparaît ; à la réouverture, aucune question pour cette session.
-4. Remettre le seuil souhaité (10 h par défaut). Le rappel peut être désactivé dans Réglages → Suivi.
+4. Remettre le seuil souhaité (10 h par défaut). Le rappel peut être désactivé dans Réglages → Rappels.
 
 ## 15. Annuler et démarrer plus tôt
-1. Toucher Pause par erreur pendant Travail → toucher « Annuler » dans le message en bas : Travail
+1. Toucher Repas par erreur pendant Travail → toucher « Annuler » dans le message en bas : Travail
    reprend, comme si de rien n'était (historique, notification, widgets).
-2. Appui long sur Sport → « Il y a 10 min » : Sport commence 10 min plus tôt, l'activité précédente
-   s'arrête à ce moment. Vérifier que les durées proposées ne remontent jamais avant le début de la
-   session en cours.
+2. Appui long sur Sport → choisir Course → « Il y a 10 min » : Sport · Course commence 10 min plus
+   tôt, l'activité précédente s'arrête à ce moment. Vérifier que les durées proposées ne remontent
+   jamais avant le début de la session en cours.
 
 ## 16. Reprendre après une pause
-1. Travail, puis Pause : l'écran principal, la notification, le widget et la tuile proposent
-   « Reprendre Travail ». Un appui reprend Travail.
-2. Dans Réglages → Gérer les activités, marquer une autre activité comme « Interruption » et vérifier
-   le même comportement.
+1. Travail · Pro, puis Pause · YouTube : l'écran principal, la notification, le widget et la tuile
+   proposent « Reprendre Travail · Pro ». Un appui reprend Travail · Pro.
+2. Dans Réglages → Activités → Gérer les activités, marquer une autre activité comme
+   « Interruption » et vérifier le même comportement.
 
 ## 17. Historique : frise et trous
 1. Historique : la frise montre la journée ; les périodes « Non suivi » (≥ 5 min) apparaissent dans
@@ -149,7 +157,7 @@ Avant de commencer :
    avec la semaine précédente, la moyenne et les séries.
 
 ## 19. Rappels et résumé
-1. Activer « Rappel “rien n'est suivi” » avec un délai d'1 h, arrêter le suivi, ne pas rouvrir
+1. Réglages → Rappels : activer « Rappel “rien n'est suivi” » avec un délai d'1 h, arrêter le suivi, ne pas rouvrir
    l'app : une notification arrive environ 1 h plus tard (dans la plage horaire), une seule fois.
 2. Activer le résumé du soir à une heure proche : notification silencieuse ; un appui ouvre les bilans.
 
@@ -158,7 +166,7 @@ Avant de commencer :
    barre d'état ou « Hyper Island » : HyperOS 3.1 annonce la prise en charge de l'API Live Updates
    d'Android 16, sans code propre à Xiaomi). Sinon : Réglages → « Live Updates désactivés dans
    Android » le cas échéant. Noter la version d'HyperOS et le rendu exact (texte, chronomètre, appui).
-2. Réglages → Sauvegarde automatique → choisir un dossier : un fichier `mon-temps-auto-…json` y
+2. Réglages → Données → Sauvegarde automatique → choisir un dossier : un fichier `mon-temps-auto-…json` y
    apparaît aussitôt. Vérifier qu'il se restaure (Réglages → Restaurer une sauvegarde).
 
 ## 21. Affichage
@@ -175,8 +183,10 @@ Avant de commencer :
    connectée. » (sinon noter le message affiché).
 3. Démarrer Travail sur le téléphone : en quelques secondes, l'aperçu et l'app montre affichent
    Travail, la bonne heure de début et un chronomètre juste.
-4. Sur la montre : START → choisir Pause. Vibration brève ; le téléphone (app, notification,
-   widgets) passe sur Pause. START → « Reprendre Travail » : Travail reprend.
+4. Sur la montre : START → choisir Pause → sous-menu YouTube / Jeu / Autre / Sans précision →
+   YouTube. Vibration brève ; le téléphone (app, notification, widgets) passe sur « Pause ·
+   YouTube ». START → « Reprendre Travail » : Travail reprend (avec sa sous-catégorie).
+   Choisir Repas (sans sous-catégorie) : pas de sous-menu.
 5. START → « Arrêter le suivi » → confirmer : le suivi s'arrête partout.
 6. Hors ligne : couper le Bluetooth du téléphone, choisir Sport sur la montre (la ligne d'état
    indique « Hors ligne · 1 en attente »), attendre 10 min, rallumer le Bluetooth et rouvrir l'app
@@ -194,3 +204,55 @@ Avant de commencer :
     « Importer » l'ajoute à l'historique (note « Course à pied (Garmin Connect) »). Rouvrir
     l'écran : « Déjà dans l'historique ». Si la liste reste vide : noter si Health Connect contient
     des séances venant de Garmin Connect.
+11. Sous-catégories : ajouter « Étude » à Travail sur le téléphone ; rouvrir le menu de la montre :
+    Travail propose Étude. La sous-catégorie en cours est marquée « En cours ».
+
+## 23. Réglages par catégories
+1. Ouvrir Réglages : sept catégories repliées (Notification, Activités, Sommeil, Rappels, Écran
+   d'accueil, Montre Garmin, Données), chacune avec un résumé de son état (ex. « Coucher et réveil
+   automatiques désactivés », puis « Coucher 23:00 · réveil 07:00 » une fois activés).
+2. Toucher une catégorie : elle se déplie (chevron retourné) ; la toucher à nouveau la replie.
+   Plusieurs catégories peuvent être ouvertes en même temps.
+3. Ouvrir Rappels, aller sur Aujourd'hui puis revenir : Rappels est toujours ouverte. Tourner
+   l'écran (si la rotation est active) : idem.
+4. Facultatif : avec TalkBack, chaque en-tête est annoncé « Dépliée » ou « Repliée ».
+
+## 24. Sous-catégories
+1. Toucher Sport : choix Muscu / Foot / Course / Autre / Sans précision ; « Annuler » ferme sans
+   rien changer. Choisir Muscu : « Sport · Muscu » en cours.
+2. Précision après coup : démarrer Travail → « Sans précision », attendre 2 min, toucher Travail →
+   Pro : la même session est précisée (Historique : une seule ligne « Travail · Pro », même début).
+3. Changement : toucher Travail → Perso : Travail · Pro s'arrête et Travail · Perso commence au même
+   instant (deux lignes dans l'historique). Le choix marque la sous-catégorie en cours « En cours ».
+4. Déplacement (ancienne « Conduite ») : Voiture / À pied / Transports / Autre. Écriture : Écrire /
+   Lire. Musique : Composition / Jouer. Pause : YouTube / Jeu / Autre.
+5. Historique : modifier une session → puces des sous-catégories de son activité ; changer
+   d'activité efface une sous-catégorie qui n'irait pas.
+6. Bilans (jour et semaine) : sous chaque activité concernée, le détail par sous-catégorie et
+   « Sans précision ».
+7. Réglages → Activités → Gérer les activités → Travail → Sous-catégories « Gérer » : ajouter
+   « Étude », renommer, retirer « Perso » → Perso disparaît du choix mais les sessions passées
+   restent « Travail · Perso » dans l'historique. Ajouter de nouveau « Perso » la rétablit.
+8. Mise à jour depuis la version précédente (si des données existaient) : rien n'est perdu ; les
+   anciennes sessions sont « sans précision » ; Conduite s'appelle Déplacement (sauf si vous l'aviez
+   renommée) ; Sommeil apparaît en dernier.
+
+## 25. Coucher et réveil automatiques
+1. Réglages → Sommeil : activer « Coucher automatique », régler l'heure 5 min plus tard. Démarrer
+   Travail, éteindre l'écran.
+2. À l'heure prévue (l'alarme peut arriver quelques minutes en retard, surtout écran éteint ou en
+   économie d'énergie) : notification silencieuse « Sommeil démarré · Depuis HH:MM » ; Sommeil
+   commence **à l'heure prévue** et Travail s'arrête à cette heure (Historique). Noter le retard
+   réel de la notification.
+3. Toucher « Annuler » dans la notification : Travail reprend comme si de rien n'était.
+4. Réveil : Sommeil en cours, activer « Réveil automatique » 5 min plus tard : notification
+   « Bonjour · Sommeil : … (HH:MM – HH:MM) » avec deux favorites et « Je dors encore ». Tester
+   « Je dors encore » (Sommeil reprend), puis une favorite.
+5. Le suivi manuel l'emporte : coucher prévu dans 5 min ; juste après l'heure, avant que la
+   notification n'arrive, démarrer Coréen : Sommeil ne doit pas démarrer.
+6. Régler un coucher déjà passé (ex. il y a 10 min) : rien de rétroactif, prochaine échéance demain.
+7. Jours : « Du lundi au vendredi » : vérifier le week-end qu'aucun coucher n'a lieu.
+8. Nuit réelle : coucher 23:00, réveil 07:00, téléphone en charge ou non, économiseur actif ou non :
+   au matin, vérifier l'historique (Sommeil de 23:00 à 07:00) et noter les éventuels retards ou
+   échecs (alarmes inexactes : HyperOS peut les regrouper). Après un redémarrage nocturne, les
+   alarmes sont reprogrammées.

@@ -6,6 +6,7 @@ import fr.montemps.domain.model.DefaultActivities
 import fr.montemps.domain.model.Goal
 import fr.montemps.domain.model.GoalPeriod
 import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -24,7 +25,10 @@ import java.time.ZoneId
  * - v2 : `preferences.longSessionReminder` (défaut `true`) ;
  * - v3 : `activities[].interruption`, `goalMinutes`, `goalPeriod` ; préférences du résumé du soir,
  *   du rappel d'inactivité et de l'affichage « Live Update ». Absents d'un fichier plus ancien :
- *   valeurs par défaut (Pause et Repas sont alors des interruptions, aucun objectif).
+ *   valeurs par défaut (Pause et Repas sont alors des interruptions, aucun objectif) ;
+ * - v4 : `subActivities` (sous-catégories), `sessions[].subId`, préférences du coucher et du réveil.
+ *   Fichier plus ancien : sous-catégories par défaut ajoutées aux activités par défaut présentes et
+ *   activité Sommeil ajoutée, comme le fait la migration de la base.
  */
 @Serializable
 data class BackupFile(
@@ -33,8 +37,18 @@ data class BackupFile(
     val exportedAt: String,
     val appVersion: String? = null,
     val activities: List<BackupActivity>,
+    val subActivities: List<BackupSubActivity> = emptyList(),
     val sessions: List<BackupSession>,
     val preferences: BackupPreferences? = null,
+)
+
+@Serializable
+data class BackupSubActivity(
+    val id: String,
+    val activityId: String,
+    val name: String,
+    val sortOrder: Int,
+    val archived: Boolean = false,
 )
 
 @Serializable
@@ -63,6 +77,7 @@ data class BackupSession(
     val source: String = "app",
     @SerialName("startElapsedRealtimeMs") val startElapsedMs: Long? = null,
     val startBootCount: Int? = null,
+    val subId: String? = null,
 )
 
 @Serializable
@@ -79,6 +94,13 @@ data class BackupPreferences(
     val idleWindowEndMinutes: Int = 22 * 60,
     val eveningSummaryEnabled: Boolean = false,
     val eveningSummaryMinutes: Int = 21 * 60,
+    val bedtimeEnabled: Boolean = false,
+    val bedtimeMinutes: Int = 23 * 60,
+    /** Jours ISO (1 = lundi … 7 = dimanche). */
+    val bedtimeDays: List<Int> = ALL_DAYS,
+    val wakeEnabled: Boolean = false,
+    val wakeMinutes: Int = 7 * 60,
+    val wakeDays: List<Int> = ALL_DAYS,
 ) {
     fun toAppPreferences(): AppPreferences = AppPreferences(
         favoriteIds = favoriteIds,
@@ -93,9 +115,17 @@ data class BackupPreferences(
         idleWindowEndMinutes = idleWindowEndMinutes,
         eveningSummaryEnabled = eveningSummaryEnabled,
         eveningSummaryMinutes = eveningSummaryMinutes,
+        bedtimeEnabled = bedtimeEnabled,
+        bedtimeMinutes = bedtimeMinutes,
+        bedtimeDays = bedtimeDays.toSet(),
+        wakeEnabled = wakeEnabled,
+        wakeMinutes = wakeMinutes,
+        wakeDays = wakeDays.toSet(),
     )
 
     companion object {
+        val ALL_DAYS = (1..7).toList()
+
         fun of(p: AppPreferences) = BackupPreferences(
             favoriteIds = p.favoriteIds,
             notificationEnabled = p.notificationEnabled,
@@ -109,6 +139,12 @@ data class BackupPreferences(
             idleWindowEndMinutes = p.idleWindowEndMinutes,
             eveningSummaryEnabled = p.eveningSummaryEnabled,
             eveningSummaryMinutes = p.eveningSummaryMinutes,
+            bedtimeEnabled = p.bedtimeEnabled,
+            bedtimeMinutes = p.bedtimeMinutes,
+            bedtimeDays = p.bedtimeDays.sorted(),
+            wakeEnabled = p.wakeEnabled,
+            wakeMinutes = p.wakeMinutes,
+            wakeDays = p.wakeDays.sorted(),
         )
     }
 }
@@ -118,6 +154,7 @@ data class BackupSnapshot(
     val activities: List<TrackedActivity>,
     val sessions: List<Session>,
     val preferences: BackupPreferences,
+    val subActivities: List<SubActivity> = emptyList(),
 )
 
 sealed interface DecodeResult {
@@ -127,7 +164,7 @@ sealed interface DecodeResult {
 
 object BackupCodec {
     const val FORMAT_ID = "mon-temps-backup"
-    const val CURRENT_VERSION = 3
+    const val CURRENT_VERSION = 4
 
     private val json = Json {
         prettyPrint = true
@@ -152,6 +189,9 @@ object BackupCodec {
                     goalPeriod = it.goal?.period?.id,
                 )
             },
+            subActivities = snapshot.subActivities.sortedWith(compareBy({ it.activityId }, { it.sortOrder })).map {
+                BackupSubActivity(it.id, it.activityId, it.name, it.sortOrder, it.archived)
+            },
             sessions = snapshot.sessions.sortedBy { it.start }.map {
                 BackupSession(
                     id = it.id,
@@ -163,6 +203,7 @@ object BackupCodec {
                     source = it.source,
                     startElapsedMs = it.startElapsedRealtimeMs,
                     startBootCount = it.startBootCount,
+                    subId = it.subId,
                 )
             },
             preferences = snapshot.preferences,
@@ -207,6 +248,28 @@ object BackupCodec {
             )
         }
 
+        // Fichier antérieur aux sous-catégories : mêmes ajouts que la migration de la base.
+        if (file.formatVersion < 4 && activities.none { it.id == DefaultActivities.SLEEP || it.name.equals("Sommeil", ignoreCase = true) }) {
+            val sleep = DefaultActivities.all.first { it.id == DefaultActivities.SLEEP }
+            activities += sleep.copy(sortOrder = (activities.maxOfOrNull { it.sortOrder } ?: -1) + 1)
+            ids += sleep.id
+        }
+        val subs = mutableListOf<SubActivity>()
+        val subIds = HashSet<String>()
+        for (sub in file.subActivities) {
+            if (sub.id.isBlank() || !subIds.add(sub.id)) return DecodeResult.Invalid("Identifiant de sous-catégorie invalide ou en double : ${sub.id}.")
+            if (sub.activityId !in ids) return DecodeResult.Invalid("Une sous-catégorie fait référence à une activité inconnue (${sub.activityId}).")
+            if (sub.name.isBlank()) return DecodeResult.Invalid("La sous-catégorie ${sub.id} n'a pas de nom.")
+            subs += SubActivity(sub.id, sub.activityId, sub.name.trim(), sub.sortOrder, sub.archived)
+        }
+        if (file.formatVersion < 4) {
+            DefaultActivities.defaultSubs.filter { it.activityId in ids && it.id !in subIds }.forEach {
+                subs += it
+                subIds += it.id
+            }
+        }
+        val subsById = subs.associateBy { it.id }
+
         val sessions = mutableListOf<Session>()
         val sessionIds = HashSet<Long>()
         for (s in file.sessions) {
@@ -218,6 +281,9 @@ object BackupCodec {
                 return DecodeResult.Invalid("La sauvegarde contient une session dans le futur (${s.start}).")
             }
             if (runCatching { ZoneId.of(s.zoneId) }.isFailure) return DecodeResult.Invalid("Fuseau horaire invalide : ${s.zoneId}.")
+            if (s.subId != null && subsById[s.subId]?.activityId != s.activityId) {
+                return DecodeResult.Invalid("Une session fait référence à une sous-catégorie inconnue (${s.subId}).")
+            }
             sessions += Session(
                 id = s.id,
                 activityId = s.activityId,
@@ -228,6 +294,7 @@ object BackupCodec {
                 startElapsedRealtimeMs = s.startElapsedMs,
                 startBootCount = s.startBootCount,
                 source = s.source,
+                subId = s.subId,
             )
         }
         SessionValidator.findInconsistency(sessions)?.let { return DecodeResult.Invalid(it) }
@@ -242,9 +309,13 @@ object BackupCodec {
                 idleWindowStartMinutes = if (windowValid) p.idleWindowStartMinutes else 8 * 60,
                 idleWindowEndMinutes = if (windowValid) p.idleWindowEndMinutes else 22 * 60,
                 eveningSummaryMinutes = p.eveningSummaryMinutes.coerceIn(0, 1439),
+                bedtimeMinutes = p.bedtimeMinutes.coerceIn(0, 1439),
+                bedtimeDays = p.bedtimeDays.filter { it in 1..7 }.distinct().sorted(),
+                wakeMinutes = p.wakeMinutes.coerceIn(0, 1439),
+                wakeDays = p.wakeDays.filter { it in 1..7 }.distinct().sorted(),
             )
         }
-        return DecodeResult.Valid(BackupSnapshot(activities, sessions, prefs), file.exportedAt)
+        return DecodeResult.Valid(BackupSnapshot(activities, sessions, prefs, subs), file.exportedAt)
     }
 
     fun colorToHex(color: Int): String = String.format("#%06X", color and 0xFFFFFF)

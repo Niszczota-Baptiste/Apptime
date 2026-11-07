@@ -141,7 +141,7 @@ fun ReportsScreen(vm: ReportsViewModel) {
                 Spacer(Modifier.height(14.dp))
                 report.totals.forEach { t ->
                     val a = s.activities[t.activityId]
-                    ShareRow(a, a?.name ?: t.activityId, t.duration, t.shareOfTracked)
+                    ShareRow(a, a?.name ?: t.activityId, t.duration, t.shareOfTracked, t.bySub, s.subs)
                 }
             }
             if (s.goals.isNotEmpty() || s.dailyGoalsWeek.isNotEmpty()) {

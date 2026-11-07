@@ -6,6 +6,7 @@ import fr.montemps.data.db.toDomain
 import fr.montemps.data.db.toEntity
 import fr.montemps.domain.TrackingStore
 import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -15,6 +16,7 @@ import java.time.Instant
 /** Implémentation Room de [TrackingStore] + flux observables pour l'interface. */
 class RoomTrackingStore(private val db: MonTempsDatabase) : TrackingStore {
     private val activityDao = db.activityDao()
+    private val subDao = db.subActivityDao()
     private val sessionDao = db.sessionDao()
 
     override suspend fun <T> transaction(block: suspend () -> T): T = db.withTransaction { block() }
@@ -34,10 +36,16 @@ class RoomTrackingStore(private val db: MonTempsDatabase) : TrackingStore {
     override suspend fun upsertActivity(activity: TrackedActivity) = activityDao.upsert(activity.toEntity())
     override suspend fun countSessionsFor(activityId: String): Int = sessionDao.countFor(activityId)
 
-    override suspend fun replaceAll(activities: List<TrackedActivity>, sessions: List<Session>) {
+    override suspend fun subActivity(id: String): SubActivity? = subDao.get(id)?.toDomain()
+    override suspend fun subActivities(): List<SubActivity> = subDao.getAll().map { it.toDomain() }
+    override suspend fun upsertSubActivity(sub: SubActivity) = subDao.upsert(sub.toEntity())
+
+    override suspend fun replaceAll(activities: List<TrackedActivity>, subActivities: List<SubActivity>, sessions: List<Session>) {
         sessionDao.deleteAll()
+        subDao.deleteAll()
         activityDao.deleteAll()
         activityDao.insertAll(activities.map { it.toEntity() })
+        subDao.insertAll(subActivities.map { it.toEntity() })
         // Les sessions terminées d'abord, puis l'éventuelle session active (trigger « une seule active »).
         sessionDao.insertAll(sessions.sortedWith(compareBy<Session> { it.isActive }.thenBy { it.start }).map { it.toEntity() })
     }
@@ -46,6 +54,10 @@ class RoomTrackingStore(private val db: MonTempsDatabase) : TrackingStore {
 
     fun observeActivities(): Flow<List<TrackedActivity>> =
         activityDao.observeAll().map { list -> list.map { it.toDomain() } }.distinctUntilChanged()
+
+    /** Toutes les sous-catégories (archivées comprises), par activité puis ordre. */
+    fun observeSubActivities(): Flow<List<SubActivity>> =
+        subDao.observeAll().map { list -> list.map { it.toDomain() } }.distinctUntilChanged()
 
     fun observeRecentEnded(limit: Int): Flow<List<Session>> =
         sessionDao.observeRecentEnded(limit).map { list -> list.map { it.toDomain() } }.distinctUntilChanged()

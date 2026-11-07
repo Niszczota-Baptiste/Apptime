@@ -87,6 +87,13 @@ fun SessionEditScreen(vm: SessionEditViewModel, onDone: () -> Unit) {
                     Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = scheme.onSurfaceVariant)
                 }
             }
+            val subChoices = s.subChoices
+            if (subChoices.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FieldLabel("Sous-catégorie")
+                    SubChips(subChoices, selectedId = s.subId, onSelect = vm::setSub)
+                }
+            }
             DateTimeField("Début", s.start, vm::setStart, enabled = !s.isActive)
             if (s.isActive) {
                 NoteBox(
@@ -167,3 +174,25 @@ fun SessionEditScreen(vm: SessionEditViewModel, onDone: () -> Unit) {
     }
 }
 
+/** Choix de la sous-catégorie : « Aucune » puis les sous-catégories de l'activité. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SubChips(subs: List<fr.montemps.domain.model.SubActivity>, selectedId: String?, onSelect: (String?) -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        androidx.compose.material3.FilterChip(
+            selected = selectedId == null,
+            onClick = { onSelect(null) },
+            label = { Text("Aucune") },
+        )
+        subs.forEach { sub ->
+            androidx.compose.material3.FilterChip(
+                selected = sub.id == selectedId,
+                onClick = { onSelect(sub.id) },
+                label = { Text(sub.name) },
+            )
+        }
+    }
+}

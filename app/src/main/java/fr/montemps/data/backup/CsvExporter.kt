@@ -1,6 +1,7 @@
 package fr.montemps.data.backup
 
 import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.domain.report.Fmt
 import java.time.Instant
@@ -19,12 +20,18 @@ object CsvExporter {
     private val localFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
     val header = listOf(
-        "id", "activite_id", "activite", "debut_local", "fin_local", "fuseau",
+        "id", "activite_id", "activite", "sous_categorie", "debut_local", "fin_local", "fuseau",
         "debut_utc", "fin_utc", "duree_secondes", "duree", "en_cours", "note",
     )
 
-    fun export(sessions: List<Session>, activities: List<TrackedActivity>, now: Instant): String {
+    fun export(
+        sessions: List<Session>,
+        activities: List<TrackedActivity>,
+        now: Instant,
+        subActivities: List<SubActivity> = emptyList(),
+    ): String {
         val names = activities.associate { it.id to it.name }
+        val subNames = subActivities.associate { it.id to it.name }
         val sb = StringBuilder("\uFEFF")
         sb.append(header.joinToString(SEP)).append("\r\n")
         for (s in sessions.sortedBy { it.start }) {
@@ -34,6 +41,7 @@ object CsvExporter {
                 s.id.toString(),
                 s.activityId,
                 names[s.activityId] ?: s.activityId,
+                s.subId?.let { subNames[it] ?: it } ?: "",
                 localFormat.format(s.start.atZone(zone)),
                 s.end?.let { localFormat.format(it.atZone(zone)) } ?: "",
                 s.zoneId,

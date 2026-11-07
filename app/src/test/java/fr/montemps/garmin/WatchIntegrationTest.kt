@@ -164,6 +164,26 @@ class WatchIntegrationTest {
     }
 
     @Test
+    fun subCategoryChosenOnTheWatchIsAppliedOrRefused() = runBlocking {
+        c.watch.setEnabled(true)
+        link.receive(mapOf("c" to "switch", "id" to WORK, "sub" to "work_pro"))
+        deliverWatchBroadcasts()
+        waitFor("Travail · Pro démarré depuis la montre") { c.store.activeSession()?.subId == "work_pro" }
+        waitFor("état renvoyé avec le nom complet") { active(link.sent.lastOrNull())?.get("n") == "Travail · Pro" }
+        assertEquals("work_pro", active(link.sent.last())!!["sub"])
+
+        // Sous-catégorie retirée sur le téléphone entre-temps : refus expliqué, rien ne change.
+        c.catalog.setSubArchived("work_perso", true)
+        link.receive(mapOf("c" to "switch", "id" to WORK, "sub" to "work_perso"))
+        deliverWatchBroadcasts()
+        waitFor("refus renvoyé à la montre") { link.sent.any { it["msg"] == "Sous-catégorie indisponible" } }
+        assertEquals("work_pro", c.store.activeSession()!!.subId)
+        // Le sous-menu de la montre ne propose plus la sous-catégorie retirée.
+        val work = (link.sent.last()["acts"] as List<*>).map { it as Map<*, *> }.first { it["id"] == WORK }
+        assertEquals(listOf("work_pro"), (work["subs"] as List<*>).map { (it as Map<*, *>)["id"] })
+    }
+
+    @Test
     fun commandsSurviveTheTripThroughTheReceiverIntent() {
         val at = Instant.parse("2026-11-05T07:20:00Z")
         listOf(
@@ -171,6 +191,8 @@ class WatchIntegrationTest {
             WatchCommand.Expired,
             WatchCommand.Switch("work"),
             WatchCommand.Switch("sport", at),
+            WatchCommand.Switch("sport", at, "sport_running"),
+            WatchCommand.Switch("work", null, "work_pro"),
             WatchCommand.Stop(),
             WatchCommand.Stop(at),
             WatchCommand.Resume(at),

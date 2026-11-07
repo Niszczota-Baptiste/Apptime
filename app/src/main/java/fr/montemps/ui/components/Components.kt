@@ -61,8 +61,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import fr.montemps.domain.report.Fmt
+import fr.montemps.domain.report.SubShare
 import fr.montemps.domain.report.GoalProgress
 import fr.montemps.domain.report.PeriodReport
 import java.time.Duration
@@ -95,6 +97,10 @@ fun ActivityTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    /** Sous-catégorie en cours (« Pro ») : affichée après « En cours ». */
+    activeSub: String? = null,
+    /** L'activité propose des sous-catégories : un appui ouvre le choix. */
+    hasSubs: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val container by animateColorAsState(if (isActive) scheme.inverseSurface else scheme.surfaceContainer, label = "tile")
@@ -107,13 +113,18 @@ fun ActivityTile(
             .background(container)
             .combinedClickable(
                 role = Role.Button,
-                onClickLabel = if (isActive) null else "Démarrer",
+                onClickLabel = when {
+                    hasSubs -> "Choisir"
+                    isActive -> null
+                    else -> "Démarrer"
+                },
                 onLongClickLabel = if (onLongClick != null) "Démarrer plus tôt" else null,
                 onLongClick = onLongClick,
                 onClick = onClick,
             )
             .semantics {
-                contentDescription = if (isActive) "${activity.name}, en cours" else activity.name
+                val label = fr.montemps.domain.model.displayName(activity.name, activeSub)
+                contentDescription = if (isActive) "$label, en cours" else activity.name
                 if (isActive) stateDescription = "En cours"
             },
         contentAlignment = Alignment.CenterStart,
@@ -131,7 +142,13 @@ fun ActivityTile(
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (isActive) {
-                        Text("En cours", style = MaterialTheme.typography.labelMedium, color = content.copy(alpha = 0.7f))
+                        Text(
+                            if (activeSub == null) "En cours" else "En cours · $activeSub",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = content.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -444,7 +461,35 @@ fun distributionSegments(report: PeriodReport, activities: Map<String, TrackedAc
 
 /** Ligne « repère · nom · durée · % du temps suivi ». */
 @Composable
-fun ShareRow(activity: TrackedActivity?, name: String, duration: Duration, share: Double) {
+fun ShareRow(activity: TrackedActivity?, name: String, duration: Duration, share: Double, bySub: List<SubShare> = emptyList(), subs: Map<String, SubActivity> = emptyMap()) {
+    ShareLine(activity, name, duration, share)
+    if (bySub.isNotEmpty()) SubShareRows(bySub, subs)
+}
+
+/** Détail par sous-catégorie sous une ligne d'activité (« Pro 3 h 10 »), plus discret. */
+@Composable
+fun SubShareRows(shares: List<SubShare>, subs: Map<String, SubActivity>) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(Modifier.fillMaxWidth().padding(start = 32.dp, bottom = 6.dp)) {
+        shares.forEach { sh ->
+            val name = sh.subId?.let { subs[it]?.name } ?: "Sans précision"
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 26.dp)
+                    .semantics(mergeDescendants = true) { contentDescription = "$name : ${Fmt.spoken(sh.duration)}" },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(name, style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(Fmt.short(sh.duration), style = MaterialTheme.typography.bodyMedium.tabular(), color = muted)
+                Spacer(Modifier.widthIn(min = 56.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareLine(activity: TrackedActivity?, name: String, duration: Duration, share: Double) {
     Row(
         Modifier
             .fillMaxWidth()

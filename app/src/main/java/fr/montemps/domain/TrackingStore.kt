@@ -1,6 +1,7 @@
 package fr.montemps.domain
 
 import fr.montemps.domain.model.Session
+import fr.montemps.domain.model.SubActivity
 import fr.montemps.domain.model.TrackedActivity
 import java.time.Instant
 
@@ -28,8 +29,13 @@ interface TrackingStore {
     suspend fun upsertActivity(activity: TrackedActivity)
     suspend fun countSessionsFor(activityId: String): Int
 
+    suspend fun subActivity(id: String): SubActivity?
+    /** Toutes les sous-catégories, archivées comprises (l'historique peut y faire référence). */
+    suspend fun subActivities(): List<SubActivity>
+    suspend fun upsertSubActivity(sub: SubActivity)
+
     /** Remplace toutes les données (restauration). Doit être appelée dans [transaction]. */
-    suspend fun replaceAll(activities: List<TrackedActivity>, sessions: List<Session>)
+    suspend fun replaceAll(activities: List<TrackedActivity>, subActivities: List<SubActivity>, sessions: List<Session>)
 }
 
 /** Appelé après chaque écriture validée (mise à jour de la notification, etc.). */

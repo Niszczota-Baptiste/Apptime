@@ -1,6 +1,5 @@
 package fr.montemps.domain.watch
 
-import fr.montemps.domain.ResumeRule
 import fr.montemps.domain.TimeTracker
 import fr.montemps.domain.TrackingStore
 import fr.montemps.domain.TransitionResult
@@ -14,7 +13,7 @@ import java.time.Instant
 sealed interface WatchCommand {
     /** La montre demande l'état actuel (ouverture de l'app, reconnexion). */
     data object Status : WatchCommand
-    data class Switch(val activityId: String, val at: Instant? = null) : WatchCommand
+    data class Switch(val activityId: String, val at: Instant? = null, val subId: String? = null) : WatchCommand
     data class Stop(val at: Instant? = null) : WatchCommand
     /** Reprendre l'activité interrompue (ou la dernière activité, si rien n'est suivi). */
     data class Resume(val at: Instant? = null) : WatchCommand
@@ -36,16 +35,16 @@ class WatchCommandHandler(
     suspend fun handle(command: WatchCommand): String? = when (command) {
         WatchCommand.Status -> null
         WatchCommand.Expired -> "Commande trop ancienne, ignorée"
-        is WatchCommand.Switch -> switch(command.activityId, command.at)
+        is WatchCommand.Switch -> switch(command.activityId, command.at, command.subId)
         is WatchCommand.Stop -> stop(command.at)
         is WatchCommand.Resume -> resume(command.at)
     }
 
-    private suspend fun switch(activityId: String, at: Instant?): String? {
+    private suspend fun switch(activityId: String, at: Instant?, subId: String?): String? {
         val result = if (at == null) {
-            tracker.switchTo(activityId, CommandSource.Watch)
+            tracker.switchTo(activityId, CommandSource.Watch, subId)
         } else {
-            tracker.switchToAt(activityId, at, CommandSource.Watch)
+            tracker.switchToAt(activityId, at, CommandSource.Watch, subId)
         }
         return (result as? TransitionResult.Rejected)?.let { refusal(it.reason, delayed = at != null) }
     }
@@ -56,16 +55,11 @@ class WatchCommandHandler(
         return (result as? TransitionResult.Rejected)?.let { refusal(it.reason, delayed = at != null) }
     }
 
+    /** Même règle que partout : l'activité interrompue (ou la dernière), avec sa sous-catégorie. */
     private suspend fun resume(at: Instant?): String? {
-        val activities = store.activities().associateBy { it.id }
-        val recent = store.recentEndedSessions(ResumeRule.LOOKBACK)
-        val active = store.activeSession()
-        val target = if (active != null) {
-            ResumeRule.resumeTarget(active, activities, recent)
-        } else {
-            ResumeRule.lastWorkActivity(recent, activities, exclude = null)
-        }
-        return if (target == null) "Rien à reprendre" else switch(target.id, at)
+        if (tracker.resumePoint() == null) return "Rien à reprendre"
+        val result = tracker.resume(CommandSource.Watch, at)
+        return (result as? TransitionResult.Rejected)?.let { refusal(it.reason, delayed = at != null) }
     }
 
     companion object {
@@ -73,6 +67,7 @@ class WatchCommandHandler(
         fun refusal(reason: TransitionResult.Reason, delayed: Boolean): String = when (reason) {
             TransitionResult.Reason.UNKNOWN_ACTIVITY -> "Activité inconnue"
             TransitionResult.Reason.ARCHIVED_ACTIVITY -> "Activité archivée"
+            TransitionResult.Reason.INVALID_SUB -> "Sous-catégorie indisponible"
             TransitionResult.Reason.CLOCK_BEFORE_LAST_RECORD -> "Heure du téléphone incohérente"
             TransitionResult.Reason.NOT_ACTIVE -> "Aucun suivi en cours"
             TransitionResult.Reason.START_IN_FUTURE -> "Heure dans le futur"

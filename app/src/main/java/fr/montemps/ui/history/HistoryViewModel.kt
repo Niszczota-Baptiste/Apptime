@@ -24,6 +24,8 @@ import java.time.ZoneId
 data class HistoryItem(
     val session: Session,
     val activity: TrackedActivity?,
+    /** Nom de la sous-catégorie (« Pro »), si la session en a une. */
+    val subName: String? = null,
     val totalDuration: Duration,
     /** Partie de la session comprise dans la journée affichée. */
     val durationInDay: Duration,
@@ -71,15 +73,17 @@ class HistoryViewModel(private val c: AppContainer) : ViewModel() {
     }
 
     val state: StateFlow<HistoryUiState?> = combine(
-        selected, sessions, c.store.observeActivities(), displayTicker(c.time),
-    ) { date, list, activities, now ->
+        selected, sessions, c.store.observeActivities(), c.store.observeSubActivities(), displayTicker(c.time),
+    ) { date, list, activities, subs, now ->
         val zone = c.time.zone()
         val (from, to) = ReportCalculator.dayBounds(date, zone)
         val byId = activities.associateBy { it.id }
+        val subNames = subs.associate { it.id to it.name }
         val items = list.sortedByDescending { it.start }.map { s ->
             HistoryItem(
                 session = s,
                 activity = byId[s.activityId],
+                subName = s.subId?.let { subNames[it] },
                 totalDuration = s.duration(now),
                 durationInDay = ReportCalculator.clippedDuration(s, from, to, now),
                 startedBefore = s.start.isBefore(from),

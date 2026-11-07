@@ -38,6 +38,18 @@ data class IdleContent(val sinceLabel: String, val actions: List<FavoriteAction>
 /** Résumé du soir. */
 data class SummaryContent(val title: String, val text: String)
 
+/**
+ * Coucher ou réveil automatique : [undo] rétablit l'état précédent (« Annuler », « Je dors encore »),
+ * [actions] démarrent une activité (au réveil).
+ */
+data class SleepContent(
+    val title: String,
+    val text: String,
+    val undoLabel: String,
+    val undo: fr.montemps.domain.UndoToken?,
+    val actions: List<FavoriteAction> = emptyList(),
+)
+
 /** Rappel « session longue » (session peut-être oubliée). */
 data class ReminderContent(
     val sessionId: Long,
@@ -65,10 +77,13 @@ class TrackingNotifier(private val context: Context) {
         const val CHANNEL_ID = "tracking"
         const val REMINDER_CHANNEL_ID = "reminders"
         const val SUMMARY_CHANNEL_ID = "summaries"
+        const val SLEEP_CHANNEL_ID = "sleep"
         const val NOTIFICATION_ID = 1001
         const val REMINDER_ID = 1002
         const val IDLE_ID = 1003
         const val SUMMARY_ID = 1004
+        const val BEDTIME_ID = 1005
+        const val WAKE_ID = 1006
     }
 
     private val manager = NotificationManagerCompat.from(context)
@@ -96,6 +111,19 @@ class TrackingNotifier(private val context: Context) {
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
                 description = context.getString(R.string.reminder_channel_description)
+                setShowBadge(false)
+            },
+        )
+        system.createNotificationChannel(
+            NotificationChannel(
+                SLEEP_CHANNEL_ID,
+                context.getString(R.string.sleep_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = context.getString(R.string.sleep_channel_description)
+                // Au coucher comme au réveil : ni son ni vibration.
+                setSound(null, null)
+                enableVibration(false)
                 setShowBadge(false)
             },
         )
@@ -138,6 +166,12 @@ class TrackingNotifier(private val context: Context) {
 
     fun showSummary(content: SummaryContent) = post(SUMMARY_CHANNEL_ID, SUMMARY_ID) { buildSummary(content) }
 
+    fun showBedtime(content: SleepContent) = post(SLEEP_CHANNEL_ID, BEDTIME_ID) { buildSleep(content, BEDTIME_ID) }
+
+    fun showWake(content: SleepContent) = post(SLEEP_CHANNEL_ID, WAKE_ID) { buildSleep(content, WAKE_ID) }
+
+    fun cancelSleep(id: Int) = manager.cancel(id)
+
     /** Android 16+ : l'utilisateur autorise-t-il les « Live Updates » de l'app ? */
     fun canPostPromoted(): Boolean = runCatching { manager.canPostPromotedNotifications() }.getOrDefault(true)
 
@@ -162,7 +196,7 @@ class TrackingNotifier(private val context: Context) {
             .setRequestPromotedOngoing(content.promoted)
 
         content.resume?.let {
-            builder.addAction(0, it.label, TrackingIntents.switchTo(context, it.activityId, CommandSource.Notification))
+            builder.addAction(0, it.label, TrackingIntents.resume(context, CommandSource.Notification))
         }
         content.favorites.forEach { fav ->
             builder.addAction(0, fav.label, TrackingIntents.switchTo(context, fav.activityId, CommandSource.Notification))
@@ -227,6 +261,25 @@ class TrackingNotifier(private val context: Context) {
         content.actions.take(3).forEach {
             builder.addAction(0, it.label, TrackingIntents.switchTo(context, it.activityId, CommandSource.Notification))
         }
+        return builder.build()
+    }
+
+    fun buildSleep(content: SleepContent, id: Int): Notification {
+        val builder = NotificationCompat.Builder(context, SLEEP_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_tracking)
+            .setContentTitle(content.title)
+            .setContentText(content.text)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setShowWhen(false)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setLocalOnly(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(TrackingIntents.openApp(context))
+        content.actions.take(2).forEach {
+            builder.addAction(0, it.label, TrackingIntents.switchTo(context, it.activityId, CommandSource.Notification))
+        }
+        content.undo?.let { builder.addAction(0, content.undoLabel, TrackingIntents.undo(context, it, id)) }
         return builder.build()
     }
 

@@ -11,6 +11,11 @@ Cible : Redmi Note 17 Pro 5G (6 Go de RAM, Android 16 / HyperOS 3). Compatible A
 
 - **Aujourd'hui** : activité en cours (pastille, nom, chronomètre hh:mm:ss, heure de début),
   « Arrêter le suivi », raccourcis en un appui, total suivi, répartition et objectifs du jour.
+- **Sous-catégories** : un appui sur une activité qui en a ouvre le choix — Travail : Perso / Pro ;
+  Pause : YouTube / Jeu / Autre ; Sport : Muscu / Foot / Course / Autre ; Écriture : Écrire / Lire ;
+  Musique : Composition / Jouer ; Déplacement : Voiture / À pied / Transports / Autre (ou « Sans
+  précision »). Affiché « Travail · Pro » ; bilans détaillés par sous-catégorie ; ajout, renommage
+  et retrait dans Activités.
 - **Annuler** : après chaque changement, « Annuler » pendant quelques secondes (appui accidentel).
 - **Démarrer plus tôt** : appui long sur une activité → il y a 5, 10, 15, 30, 60 min ou une heure
   précise, sans jamais chevaucher la session précédente.
@@ -23,20 +28,26 @@ Cible : Redmi Note 17 Pro 5G (6 Go de RAM, Android 16 / HyperOS 3). Compatible A
   appui ; modifier, ajouter, supprimer (avec confirmation). Aucun chevauchement possible.
 - **Bilans** jour et semaine : durées, pourcentages *du temps suivi*, temps non suivi explicite,
   objectifs, comparaison avec la semaine précédente (au même moment), moyenne par jour, séries.
-- **Activités** : 10 activités par défaut, création, renommage, couleur, ordre, archivage,
-  interruption (reprise proposée), objectif par jour ou par semaine.
+- **Activités** : 11 activités par défaut (dont Déplacement et Sommeil), création, renommage,
+  couleur, ordre, archivage, interruption (reprise proposée), objectif par jour ou par semaine,
+  sous-catégories.
 - **Écran d'accueil** : widgets « Suivi en cours » et « Activités » ; **centre de contrôle** :
   tuile « Mon Temps ».
 - **Rappels** (facultatifs, sobres) : session longue, « rien n'est suivi » dans une plage horaire,
   résumé du soir (silencieux).
+- **Coucher et réveil automatiques** (facultatifs, désactivés par défaut) : à l'heure et les jours
+  choisis, Sommeil démarre puis s'arrête tout seul, avec une notification silencieuse
+  (« Annuler », « Je dors encore »). Ce que vous faites entre-temps l'emporte toujours.
+- **Réglages par catégories** repliables (Notification, Activités, Sommeil, Rappels, Écran
+  d'accueil, Montre Garmin, Données), avec un résumé de l'état sur chaque en-tête.
 - **Données** : export CSV, sauvegarde JSON versionnée, restauration validée et atomique,
   **sauvegarde automatique hebdomadaire** dans un dossier choisi (8 copies conservées).
 - **Session oubliée** : à la réouverture, après un seuil réglable ou un redémarrage du téléphone,
   l'app propose de continuer ou de corriger l'heure de fin. Rien n'est inventé.
 - **Montre Garmin** (Forerunner 965, [`docs/GARMIN.md`](docs/GARMIN.md)) : app Connect IQ
-  « Mon Temps » (aperçu, chronomètre, changer / reprendre / arrêter au poignet, file hors ligne
-  appliquée à l'heure d'origine), rappels au poignet via Garmin Connect, import des séances de la
-  montre (Health Connect, lecture seule, après votre choix).
+  « Mon Temps » (aperçu, chronomètre, changer / reprendre / arrêter au poignet, sous-catégories,
+  file hors ligne appliquée à l'heure d'origine), rappels au poignet via Garmin Connect, import des
+  séances de la montre (Health Connect, lecture seule, après votre choix).
 
 ## Interface
 
@@ -46,7 +57,7 @@ Pensée pour ne pas distraire :
 - les couleurs des activités (teintes douces) sont les seuls accents, sous forme de pastilles ;
 - un grand chronomètre en graisse fine, à chiffres fixes, au centre de l'écran ;
 - l'activité en cours est affichée en négatif (fond encre) avec la mention « En cours » ;
-- les dix raccourcis tiennent sur un écran, et ne bougent pas quand on démarre ou arrête ;
+- les onze raccourcis tiennent sur un écran, et ne bougent pas quand on démarre ou arrête ;
 - pas de cartes ni d'ombres, une barre de navigation fine, des titres intégrés au contenu ;
 - aucune icône ni émoji : une activité = un nom et une pastille de couleur ;
 - les widgets reprennent exactement ce langage (clair/sombre selon le système).
@@ -83,7 +94,7 @@ Prérequis : JDK 17 ou plus récent, Android SDK (plateforme 36). Le wrapper Gra
 ```bash
 echo "sdk.dir=/chemin/vers/android-sdk" > local.properties   # ou variable ANDROID_HOME
 ./gradlew :app:assembleDebug          # APK : app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (119 tests, régénère les captures)
+./gradlew :app:testDebugUnitTest      # tests JVM + Robolectric (148 tests, régénère les captures)
 ./gradlew :app:lintDebug              # analyse Android Lint
 ./gradlew :app:assembleRelease        # APK release minifiée (non signée : configurer un keystore)
 ```
@@ -116,9 +127,10 @@ app/src/main/java/fr/montemps/
 │   ├── ActivityCatalog.kt  Gestion des activités
 │   ├── TrackingStore.kt    Port de persistance
 │   ├── watch/ workouts/    Commandes de la montre ; propositions d'import des séances
+│   ├── sleep/              Échéances du coucher et du réveil automatiques
 │   └── report/             Calcul des bilans, formatage français
 ├── data/                   Room (base, DAO, triggers d'intégrité), DataStore, sauvegarde CSV/JSON, Health Connect
-├── notification/           Notifications (suivi, rappel), actions, alarmes, événements système
+├── notification/           Notifications (suivi, rappels, coucher/réveil), actions, alarmes, événements système
 ├── surfaces/               Widgets d'écran d'accueil et tuile du centre de contrôle
 ├── garmin/                 Liaison avec la montre (SDK Connect IQ, protocole)
 ├── ui/                     Compose : today, history, reports, activities, settings, workouts, components

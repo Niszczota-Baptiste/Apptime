@@ -185,7 +185,7 @@ private fun HistoryRow(item: HistoryItem, s: HistoryUiState, onClick: () -> Unit
     val session = item.session
     val zone = s.zone
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val name = item.activity?.name ?: session.activityId
+    val name = fr.montemps.domain.model.displayName(item.activity?.name ?: session.activityId, item.subName)
     val startText = if (item.startedBefore) Fmt.startLabel(session.start, s.date, zone) else Fmt.time(session.start, zone)
     val endText = session.end?.let {
         if (item.endsAfter) "${Fmt.dayShort(it.atZone(zone).toLocalDate())} ${Fmt.time(it, zone)}" else Fmt.time(it, zone)

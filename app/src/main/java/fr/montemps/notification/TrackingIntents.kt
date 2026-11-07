@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import fr.montemps.MainActivity
+import fr.montemps.domain.UndoToken
 import fr.montemps.domain.model.CommandSource
 import fr.montemps.domain.watch.WatchCommand
 import java.time.Instant
@@ -22,6 +23,21 @@ object TrackingIntents {
             putExtra(TrackingActionReceiver.EXTRA_ACTIVITY_ID, activityId)
             putExtra(TrackingActionReceiver.EXTRA_SOURCE, source.id)
         }
+
+    /** « Reprendre » : l'activité interrompue (ou la dernière), avec sa sous-catégorie. */
+    fun resume(context: Context, source: CommandSource): PendingIntent =
+        broadcast(context, TrackingActionReceiver.ACTION_RESUME, "resume", source.id) {
+            putExtra(TrackingActionReceiver.EXTRA_SOURCE, source.id)
+        }
+
+    /** Ouvre l'app sur le choix de sous-catégorie de [activityId] (widget « Activités »). */
+    fun chooseSub(context: Context, activityId: String): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .setData(Uri.Builder().scheme("montemps").authority("choose").appendPath(activityId).build())
+            .putExtra(MainActivity.EXTRA_CHOOSE_ACTIVITY, activityId)
+        return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
 
     /** Arrêt de la session [sessionId] uniquement : une action périmée n'arrête pas une session plus récente. */
     fun stop(context: Context, sessionId: Long, source: CommandSource): PendingIntent =
@@ -57,6 +73,32 @@ object TrackingIntents {
     fun autoBackup(context: Context): PendingIntent =
         broadcast(context, TrackingActionReceiver.ACTION_AUTO_BACKUP, "backup") { }
 
+    /** Alarme du coucher (ou du réveil) pour l'échéance [at] : appliquée à cette heure-là. */
+    fun bedtime(context: Context, at: Instant? = null): PendingIntent =
+        broadcast(context, TrackingActionReceiver.ACTION_BEDTIME, "bedtime") {
+            at?.let { putExtra(TrackingActionReceiver.EXTRA_AT, it.toEpochMilli()) }
+        }
+
+    fun wake(context: Context, at: Instant? = null): PendingIntent =
+        broadcast(context, TrackingActionReceiver.ACTION_WAKE, "wake") {
+            at?.let { putExtra(TrackingActionReceiver.EXTRA_AT, it.toEpochMilli()) }
+        }
+
+    /** « Annuler » d'une notification : rétablit l'état d'avant la transition et retire la notification. */
+    fun undo(context: Context, token: UndoToken, notificationId: Int): PendingIntent =
+        broadcast(context, TrackingActionReceiver.ACTION_UNDO, "undo", notificationId.toString()) {
+            putExtra(TrackingActionReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+            token.startedSessionId?.let { putExtra(TrackingActionReceiver.EXTRA_STARTED_ID, it) }
+            token.endedSessionId?.let { putExtra(TrackingActionReceiver.EXTRA_SESSION_ID, it) }
+            token.endedAt?.let { putExtra(TrackingActionReceiver.EXTRA_AT, it.toEpochMilli()) }
+        }
+
+    fun undoTokenOf(intent: Intent): UndoToken = UndoToken(
+        startedSessionId = intent.getLongExtra(TrackingActionReceiver.EXTRA_STARTED_ID, -1L).takeIf { it > 0 },
+        endedSessionId = intent.getLongExtra(TrackingActionReceiver.EXTRA_SESSION_ID, -1L).takeIf { it > 0 },
+        endedAt = intent.getLongExtra(TrackingActionReceiver.EXTRA_AT, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }?.let(Instant::ofEpochMilli),
+    )
+
     /**
      * Commande de la montre, envoyée depuis notre propre processus (diffusion explicite vers le
      * récepteur non exporté) : même chemin que les actions de la notification.
@@ -68,6 +110,7 @@ object TrackingIntents {
             WatchCommand.Expired -> "expired" to null
             is WatchCommand.Switch -> {
                 intent.putExtra(TrackingActionReceiver.EXTRA_ACTIVITY_ID, command.activityId)
+                command.subId?.let { intent.putExtra(TrackingActionReceiver.EXTRA_SUB_ID, it) }
                 "switch" to command.at
             }
             is WatchCommand.Stop -> "stop" to command.at
@@ -85,7 +128,9 @@ object TrackingIntents {
         return when (intent.getStringExtra(TrackingActionReceiver.EXTRA_WATCH_COMMAND)) {
             "status" -> WatchCommand.Status
             "expired" -> WatchCommand.Expired
-            "switch" -> intent.getStringExtra(TrackingActionReceiver.EXTRA_ACTIVITY_ID)?.let { WatchCommand.Switch(it, at) }
+            "switch" -> intent.getStringExtra(TrackingActionReceiver.EXTRA_ACTIVITY_ID)?.let {
+                WatchCommand.Switch(it, at, intent.getStringExtra(TrackingActionReceiver.EXTRA_SUB_ID))
+            }
             "stop" -> WatchCommand.Stop(at)
             "resume" -> WatchCommand.Resume(at)
             else -> null
